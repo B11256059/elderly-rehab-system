@@ -347,7 +347,7 @@ with right_col:
                 if c1.button(f"🐢 未完成目標(+1分)", key=f"s_{eq}"):
                     p["service_time"] += 1
                     st.rerun()
-                if c2.button(f"🐇 已完成目標(提前結束)", key=f"f_{eq}"):
+                if c2.button(f"🐇 已完成目標(結束)", key=f"f_{eq}"):
                     if p["id"] not in st.session_state.patient_history:
                         st.session_state.patient_history[p["id"]] = set()
                     st.session_state.patient_history[p["id"]].add(eq)
