@@ -318,7 +318,7 @@ st.write("---")
 left_col, right_col = st.columns([1.2, 1])
 
 with left_col:
-    st.subheader("🔴 現場排隊等待區 (HRRN 演算法)")
+    st.subheader("🔴 現場排隊等待區")
     if not st.session_state.waiting_queue:
         st.info("目前沒有長輩在排隊等待。")
     else:
