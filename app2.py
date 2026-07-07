@@ -276,55 +276,40 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
 
 # --- HRRN 核心調度與時間維護邏輯 ---
 now = time.time()
-need_trigger_rerun = False  # 新增一個標記，用來追蹤是否有人因時間到而下機
+need_trigger_rerun = False
 
 for eq, p in list(st.session_state.equipment_status.items()):
     if p:
-        if p.get("is_paused", False):
-            paused_time = now - p["pause_start_time"]
-            if paused_time >= MID_PAUSE_SECONDS:
-                p["total_paused_duration"] += MID_PAUSE_SECONDS
-                p["is_paused"] = False
-                p["pause_start_time"] = 0
-            else:
-                continue
-
-        active_seconds = now - p["start_time"] - p.get("total_paused_duration", 0)
-        if active_seconds / 60 >= p["service_time"]:
-            if p["id"] not in st.session_state.patient_history:
-                st.session_state.patient_history[p["id"]] = set()
-            st.session_state.patient_history[p["id"]].add(eq)
-            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
+        if p.get("is_paused", False) and (now - p["pause_start_time"]) >= MID_PAUSE_SECONDS:
+            p["total_paused_duration"] += MID_PAUSE_SECONDS
+            p["is_paused"] = False
+        
+        if (now - p["start_time"] - p.get("total_paused_duration", 0)) / 60 >= p["service_time"]:
+            st.session_state.patient_history.setdefault(p["id"], set()).add(eq.split('_')[0])
+            st.session_state.cooldown_patients[p["id"]] = now + TRANSIT_COOLDOWN_SECONDS
             st.session_state.equipment_status[eq] = None
-            need_trigger_rerun = True  # 自動時間到了，標記需要重繪
+            need_trigger_rerun = True
 
 if st.session_state.waiting_queue:
     busy_ids = {p["id"] for p in st.session_state.equipment_status.values() if p}
-    now = time.time()
-    
     for p in st.session_state.waiting_queue:
-        wait_m = (now - p["arrival_time"]) / 60
-        p["hrrn_score"] = (max(wait_m, 0.001) + p["service_time"]) / p["service_time"]
+        p["hrrn_score"] = ((now - p["arrival_time"])/60 + p["service_time"]) / p["service_time"]
     
     st.session_state.waiting_queue.sort(key=lambda x: x["hrrn_score"], reverse=True)
-    
     rem_waiting = []
     for p in st.session_state.waiting_queue:
-        eq = p["target_equip"]
-        is_cd = p["id"] in st.session_state.cooldown_patients
-        
-        if st.session_state.equipment_status[eq] is None and p["id"] not in busy_ids and not is_cd:
+        slots = [k for k, v in st.session_state.equipment_status.items() if k.startswith(p["target_equip"]) and v is None]
+        if slots and p["id"] not in busy_ids and p["id"] not in st.session_state.cooldown_patients:
+            chosen_eq = slots[0]
             p["start_time"] = now
-            st.session_state.equipment_status[eq] = p
+            st.session_state.equipment_status[chosen_eq] = p
             busy_ids.add(p["id"])
-            need_trigger_rerun = True  # 有新長輩上機，標記需要重繪
+            need_trigger_rerun = True
         else:
             rem_waiting.append(p)
     st.session_state.waiting_queue = rem_waiting
 
-# 如果後台邏輯有發生狀態改變，立即重繪畫面，確保按鈕立刻消失/出現
-if need_trigger_rerun:
-    st.rerun()
+if need_trigger_rerun: st.rerun()
 
 # ==========================================
 # 7. 前端雙欄看板呈現
