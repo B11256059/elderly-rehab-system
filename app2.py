@@ -19,7 +19,7 @@ st.markdown("""
         margin-bottom: 20px;
     }
     .status-card.paused {
-        border-left: 5px solid #eab308; /* 暫停時變成黃色 */
+        border-left: 5px solid #eab308;
         background-color: #fefce8;
     }
     .waiting-row { font-size: 0.9em; padding: 10px; border-bottom: 1px solid #e2e8f0; }
@@ -85,24 +85,27 @@ for item in raw_data:
 st.table(pd.DataFrame(matrix_rows))
 
 # ==========================================
-# 3. 系統狀態初始化 (調整器材數量)
+# 3. 系統狀態初始化 (調整為多台)
 # ==========================================
-if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = []
+if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = [] 
 if "equipment_status" not in st.session_state: 
-    # 調整為 大轉輪_1,2 / 坐推_1,2,3 / 漫步機_1
     st.session_state.equipment_status = {
         "大轉輪_1": None, "大轉輪_2": None,
         "坐推_1": None, "坐推_2": None, "坐推_3": None,
         "漫步機_1": None
     }
-if "start_system_timestamp" not in st.session_state: st.session_state.start_system_timestamp = time.time()
+if "start_system_timestamp" not in st.session_state: st.session_state.start_system_timestamp = time.time()  
 if "cooldown_patients" not in st.session_state: st.session_state.cooldown_patients = {}
 if "patient_id_counter" not in st.session_state: st.session_state.patient_id_counter = 1
 if "patient_registry" not in st.session_state: st.session_state.patient_registry = {}
 if "patient_history" not in st.session_state: st.session_state.patient_history = {}
+if "input_last_name" not in st.session_state: st.session_state.input_last_name = ""
+if "input_equips" not in st.session_state: st.session_state.input_equips = []
+if "form_version" not in st.session_state: st.session_state.form_version = 0
+if "form_status" not in st.session_state: st.session_state.form_status = {"type": None, "msg": None}
 
-TRANSIT_COOLDOWN_SECONDS = 180
-MID_PAUSE_SECONDS = 60
+TRANSIT_COOLDOWN_SECONDS = 180 
+MID_PAUSE_SECONDS = 60           
 
 # ==========================================
 # 4. 功能函數
@@ -125,7 +128,7 @@ def add_patient(p_id, last_name, title, age, selected_equips):
         })
 
 # ==========================================
-# 5. 側邊欄模擬
+# 5. 側邊欄與登記表單
 # ==========================================
 with st.sidebar:
     st.header("👥 模擬情境")
@@ -143,30 +146,36 @@ with st.sidebar:
         st.session_state.patient_id_counter = 1
         st.rerun()
 
+st.write("---")
+with st.expander("➕ 長輩報到與處方登記", expanded=True):
+    with st.form(key="patient_input_form"):
+        col1, col2, col3 = st.columns([1,1,1])
+        input_ln = col1.text_input("姓氏", placeholder="例如：王")
+        input_tit = col2.selectbox("稱謂", ["爺爺", "奶奶"])
+        input_age = col3.selectbox("年齡層", [60, 70, 80, 90], format_func=lambda x:f"{x}歲")
+        input_equips = st.multiselect("復健處方器材", ["大轉輪", "坐推", "漫步機"])
+        if st.form_submit_button(label="進入排隊等待"):
+            if input_ln:
+                p_id = get_or_create_patient_id(input_ln, input_tit, input_age)
+                add_patient(p_id, input_ln, input_tit, input_age, input_equips)
+                st.rerun()
+
 # ==========================================
-# 6. 主要看板與排程邏輯 (核心調度)
+# 6. 調度邏輯
 # ==========================================
 now = time.time()
 need_trigger_rerun = False
-
-# 更新運行狀態
 for eq, p in st.session_state.equipment_status.items():
     if p:
-        if p.get("is_paused", False):
-            if now - p["pause_start_time"] >= MID_PAUSE_SECONDS:
-                p["total_paused_duration"] += MID_PAUSE_SECONDS
-                p["is_paused"] = False
-        
+        if p.get("is_paused", False) and now - p["pause_start_time"] >= MID_PAUSE_SECONDS:
+            p["total_paused_duration"] += MID_PAUSE_SECONDS
+            p["is_paused"] = False
         active_seconds = now - p["start_time"] - p.get("total_paused_duration", 0)
         if active_seconds / 60 >= p["service_time"]:
-            st.session_state.patient_history.setdefault(p["id"], set()).add(p["target_equip"])
-            st.session_state.cooldown_patients[p["id"]] = now + TRANSIT_COOLDOWN_SECONDS
             st.session_state.equipment_status[eq] = None
             need_trigger_rerun = True
 
-# HRRN 排程分配
 if st.session_state.waiting_queue:
-    busy_ids = {p["id"] for p in st.session_state.equipment_status.values() if p}
     for p in st.session_state.waiting_queue:
         wait_m = (now - p["arrival_time"]) / 60
         p["hrrn_score"] = (max(wait_m, 0.001) + p["service_time"]) / p["service_time"]
@@ -174,48 +183,35 @@ if st.session_state.waiting_queue:
     
     rem_waiting = []
     for p in st.session_state.waiting_queue:
-        # 搜尋所有名稱開頭符合的空機台 (例如：target="大轉輪" 會找到 "大轉輪_1" 或 "大轉輪_2")
         available_slots = [k for k, v in st.session_state.equipment_status.items() 
                            if k.startswith(p["target_equip"]) and v is None]
-        
-        if available_slots and p["id"] not in busy_ids and p["id"] not in st.session_state.cooldown_patients:
-            chosen_eq = available_slots[0]
+        if available_slots:
+            chosen = available_slots[0]
             p["start_time"] = now
-            st.session_state.equipment_status[chosen_eq] = p
-            busy_ids.add(p["id"])
+            st.session_state.equipment_status[chosen] = p
             need_trigger_rerun = True
         else:
             rem_waiting.append(p)
     st.session_state.waiting_queue = rem_waiting
 
-if need_trigger_rerun: st.rerun()
-
 # ==========================================
-# 7. 前端顯示
+# 7. 看板呈現
 # ==========================================
-st.write("---")
 left_col, right_col = st.columns([1.2, 1])
-
 with left_col:
     st.subheader("🔴 現場排隊等待區")
-    if not st.session_state.waiting_queue:
-        st.info("目前沒有長輩在排隊等待。")
-    else:
-        df = pd.DataFrame(st.session_state.waiting_queue)
-        st.dataframe(df[["id", "name", "target_equip", "hrrn_score"]].rename(columns={"id":"編號", "name":"姓名", "target_equip":"器材", "hrrn_score":"優先分"}), use_container_width=True)
-
+    if st.session_state.waiting_queue:
+        st.dataframe(pd.DataFrame(st.session_state.waiting_queue)[["id", "name", "target_equip"]], use_container_width=True)
 with right_col:
     st.subheader("🟢 復健器材運作狀態區")
-    # 顯示所有機台
     for eq, p in st.session_state.equipment_status.items():
-        with st.container():
-            if p:
-                st.markdown(f"""<div class="status-card"><b>⚙️ {eq}</b><br>👤 {p['name']} 執行中</div>""", unsafe_allow_html=True)
-                if st.button(f"結束 {eq}", key=f"finish_{eq}"):
-                    st.session_state.equipment_status[eq] = None
-                    st.rerun()
-            else:
-                st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
+        if p:
+            st.markdown(f"""<div class="status-card"><b>⚙️ {eq}</b><br>👤 {p['name']} 使用中</div>""", unsafe_allow_html=True)
+            if st.button(f"完成 {eq}", key=f"f_{eq}"):
+                st.session_state.equipment_status[eq] = None
+                st.rerun()
+        else:
+            st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
 
-time.sleep(1)
-st.rerun()
+if need_trigger_rerun: st.rerun()
+time.sleep(1); st.rerun()
