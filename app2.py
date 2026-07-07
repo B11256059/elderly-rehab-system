@@ -13,28 +13,16 @@ st.markdown("""
     <style>
     .main { background-color: #f8fafc; }
     .stButton>button { width: 100%; border-radius: 8px; height: 3em; font-weight: bold; }
-    .status-card {
-        background-color: white; border-radius: 12px; padding: 20px;
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-left: 5px solid #10b981;
-        margin-bottom: 20px;
-    }
-    .status-card.paused {
-        border-left: 5px solid #eab308;
-        background-color: #fefce8;
-    }
-    .waiting-row { font-size: 0.9em; padding: 10px; border-bottom: 1px solid #e2e8f0; }
+    .status-card { background-color: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-left: 5px solid #10b981; margin-bottom: 20px; }
     .highlight-text { color: #0e7490; font-weight: bold; }
-    .warning-text { color: #b45309; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("🏥 智慧復健動態排程管理系統")
 
 # ==========================================
-# 2. 原始復健運動處方大表
+# 2. 處方大表邏輯
 # ==========================================
-st.subheader("📋 復健運動處方大表")
-
 raw_data = [
     {"器材": "大轉輪", "年齡": 60, "組數": 5, "次數": 20, "組時間": "50 (AI推估)", "休息時間": "60 (參考ACSM)"},
     {"器材": "大轉輪", "年齡": 70, "組數": 4, "次數": 16, "組時間": "40 (AI推估)", "休息時間": "70 (參考ACSM)"},
@@ -50,65 +38,36 @@ raw_data = [
     {"器材": "漫步機", "年齡": 90, "組數": 2, "次數": "不適用", "組時間": 300, "休息時間": "90 (參考ACSM)"},
 ]
 
-def format_unit(value, unit):
-    val_str = str(value).strip()
-    if val_str == "" or val_str == "0": return f"- {unit}"
-    if unit in val_str or "不適用" in val_str: return val_str
-    for tag in ["(AI推估)", "(參考ACSM)"]:
-        if tag in val_str:
-            clean_num = val_str.replace(tag, "").strip()
-            return f"{clean_num} {unit} {tag}"
-    return f"{val_str} {unit}"
-
 def extract_number(value):
     val_str = str(value).strip()
     if "不適用" in val_str: return 0
     numbers = re.findall(r'\d+', val_str)
     return int(numbers[0]) if numbers else 0
 
-matrix_rows = []
 lookup_table = {}
-
 for item in raw_data:
     sets = extract_number(item["組數"])
     set_time = extract_number(item["組時間"])
     rest_time = extract_number(item["休息時間"])
-    total_seconds = (set_time * sets) + (rest_time * (sets - 1)) if sets > 1 else set_time * sets
-    total_minutes = round(total_seconds / 60)
-    lookup_table[(item["器材"], item["年齡"])] = total_minutes if total_minutes > 0 else 5
-    matrix_rows.append({
-        "器材名稱": item["器材"], "年齡層": f"{item['年齡']} 歲", "次數": format_unit(item["次數"], "次"),
-        "組數": format_unit(item["組數"], "組"), "組時間": format_unit(item["組時間"], "秒"),
-        "休息時間": format_unit(item["休息時間"], "秒"), "總時間": format_unit(str(total_minutes), "分")
-    })
-
-st.table(pd.DataFrame(matrix_rows))
+    total_m = round(((set_time * sets) + (rest_time * (sets - 1))) / 60) if sets > 1 else round((set_time * sets)/60)
+    lookup_table[(item["器材"], item["年齡"])] = total_m if total_m > 0 else 5
 
 # ==========================================
-# 3. 系統狀態初始化 (調整為多台)
+# 3. 初始化狀態
 # ==========================================
-if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = [] 
+if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = []
 if "equipment_status" not in st.session_state: 
     st.session_state.equipment_status = {
         "大轉輪_1": None, "大轉輪_2": None,
         "坐推_1": None, "坐推_2": None, "坐推_3": None,
         "漫步機_1": None
     }
-if "start_system_timestamp" not in st.session_state: st.session_state.start_system_timestamp = time.time()  
-if "cooldown_patients" not in st.session_state: st.session_state.cooldown_patients = {}
-if "patient_id_counter" not in st.session_state: st.session_state.patient_id_counter = 1
 if "patient_registry" not in st.session_state: st.session_state.patient_registry = {}
 if "patient_history" not in st.session_state: st.session_state.patient_history = {}
-if "input_last_name" not in st.session_state: st.session_state.input_last_name = ""
-if "input_equips" not in st.session_state: st.session_state.input_equips = []
-if "form_version" not in st.session_state: st.session_state.form_version = 0
-if "form_status" not in st.session_state: st.session_state.form_status = {"type": None, "msg": None}
-
-TRANSIT_COOLDOWN_SECONDS = 180 
-MID_PAUSE_SECONDS = 60           
+if "patient_id_counter" not in st.session_state: st.session_state.patient_id_counter = 1
 
 # ==========================================
-# 4. 功能函數
+# 4. 功能函數與驗證邏輯
 # ==========================================
 def get_or_create_patient_id(last_name, title, age):
     reg_key = (last_name, title, age)
@@ -118,100 +77,81 @@ def get_or_create_patient_id(last_name, title, age):
         st.session_state.patient_id_counter += 1
     return st.session_state.patient_registry[reg_key]
 
-def add_patient(p_id, last_name, title, age, selected_equips):
-    for equip in selected_equips:
-        st.session_state.waiting_queue.append({
-            "id": p_id, "name": f"{last_name}{title}", "age": age,
-            "target_equip": equip, "arrival_time": time.time(),
-            "service_time": lookup_table.get((equip, age), 5),
-            "is_paused": False, "pause_start_time": 0, "total_paused_duration": 0
-        })
-
 # ==========================================
 # 5. 側邊欄與登記表單
 # ==========================================
 with st.sidebar:
-    st.header("👥 模擬情境")
-    if st.button("🚀 注入 20 位長輩數據"):
-        mock_list = [("王", "爺爺", 70, ["大轉輪", "坐推"]), ("陳", "奶奶", 60, ["坐推", "漫步機"]), ("林", "爺爺", 80, ["漫步機"]), ("張", "奶奶", 90, ["大轉輪", "漫步機"])] * 5
-        for ln_m, tit_m, age_m, eqs_m in mock_list:
-            p_id_m = get_or_create_patient_id(ln_m, tit_m, age_m)
-            add_patient(p_id_m, ln_m, tit_m, age_m, eqs_m)
+    if st.button("🚀 注入 20 位數據"):
+        for i in range(20):
+            p_id = get_or_create_patient_id(f"長輩{i}", "爺爺", 70)
+            st.session_state.waiting_queue.append({"id": p_id, "name": f"長輩{i}爺爺", "age": 70, "target_equip": "大轉輪", "service_time": 5})
         st.rerun()
     if st.button("🧹 清空所有數據"):
         st.session_state.waiting_queue = []
         st.session_state.equipment_status = {k: None for k in st.session_state.equipment_status}
-        st.session_state.patient_registry = {}
         st.session_state.patient_history = {}
-        st.session_state.patient_id_counter = 1
         st.rerun()
 
-st.write("---")
 with st.expander("➕ 長輩報到與處方登記", expanded=True):
-    with st.form(key="patient_input_form"):
-        col1, col2, col3 = st.columns([1,1,1])
-        input_ln = col1.text_input("姓氏", placeholder="例如：王")
-        input_tit = col2.selectbox("稱謂", ["爺爺", "奶奶"])
-        input_age = col3.selectbox("年齡層", [60, 70, 80, 90], format_func=lambda x:f"{x}歲")
-        input_equips = st.multiselect("復健處方器材", ["大轉輪", "坐推", "漫步機"])
-        if st.form_submit_button(label="進入排隊等待"):
-            if input_ln:
-                p_id = get_or_create_patient_id(input_ln, input_tit, input_age)
-                add_patient(p_id, input_ln, input_tit, input_age, input_equips)
-                st.rerun()
+    with st.form("input_form"):
+        c1, c2, c3 = st.columns(3)
+        ln = c1.text_input("姓氏")
+        tit = c2.selectbox("稱謂", ["爺爺", "奶奶"])
+        age = c3.selectbox("年齡", [60, 70, 80, 90])
+        eqs = st.multiselect("復健處方器材", ["大轉輪", "坐推", "漫步機"])
+        if st.form_submit_button("登記"):
+            if not ln: st.warning("請填寫姓氏"); st.stop()
+            p_id = get_or_create_patient_id(ln, tit, age)
+            
+            # 驗證邏輯
+            for eq in eqs:
+                # 檢查是否使用中
+                if any(p and p["id"] == p_id and eq in p["target_equip"] for p in st.session_state.equipment_status.values()):
+                    st.error(f"該長輩正在使用 {eq}，不可重複排隊"); st.stop()
+                # 檢查是否已在隊列
+                if any(p["id"] == p_id and p["target_equip"] == eq for p in st.session_state.waiting_queue):
+                    st.error(f"該長輩已在 {eq} 排隊序列中"); st.stop()
+                # 檢查是否已完成
+                if eq in st.session_state.patient_history.get(p_id, set()):
+                    st.error(f"該長輩已完成 {eq} 復健"); st.stop()
+                
+                st.session_state.waiting_queue.append({
+                    "id": p_id, "name": f"{ln}{tit}", "age": age,
+                    "target_equip": eq, "arrival_time": time.time(),
+                    "service_time": lookup_table.get((eq, age), 5)
+                })
+            st.rerun()
 
 # ==========================================
-# 6. 調度邏輯
+# 6. 調度邏輯 (自動分配)
 # ==========================================
-now = time.time()
-need_trigger_rerun = False
-for eq, p in st.session_state.equipment_status.items():
-    if p:
-        if p.get("is_paused", False) and now - p["pause_start_time"] >= MID_PAUSE_SECONDS:
-            p["total_paused_duration"] += MID_PAUSE_SECONDS
-            p["is_paused"] = False
-        active_seconds = now - p["start_time"] - p.get("total_paused_duration", 0)
-        if active_seconds / 60 >= p["service_time"]:
-            st.session_state.equipment_status[eq] = None
-            need_trigger_rerun = True
-
-if st.session_state.waiting_queue:
-    for p in st.session_state.waiting_queue:
-        wait_m = (now - p["arrival_time"]) / 60
-        p["hrrn_score"] = (max(wait_m, 0.001) + p["service_time"]) / p["service_time"]
-    st.session_state.waiting_queue.sort(key=lambda x: x["hrrn_score"], reverse=True)
-    
-    rem_waiting = []
-    for p in st.session_state.waiting_queue:
-        available_slots = [k for k, v in st.session_state.equipment_status.items() 
-                           if k.startswith(p["target_equip"]) and v is None]
-        if available_slots:
-            chosen = available_slots[0]
-            p["start_time"] = now
-            st.session_state.equipment_status[chosen] = p
-            need_trigger_rerun = True
-        else:
-            rem_waiting.append(p)
-    st.session_state.waiting_queue = rem_waiting
+for p in st.session_state.waiting_queue:
+    # 尋找目標類別的空閒機台
+    for eq_key in st.session_state.equipment_status:
+        if eq_key.startswith(p["target_equip"]) and st.session_state.equipment_status[eq_key] is None:
+            st.session_state.equipment_status[eq_key] = p
+            st.session_state.waiting_queue.remove(p)
+            break
 
 # ==========================================
-# 7. 看板呈現
+# 7. 看板
 # ==========================================
-left_col, right_col = st.columns([1.2, 1])
-with left_col:
+col1, col2 = st.columns([1, 1])
+with col1:
     st.subheader("🔴 現場排隊等待區")
     if st.session_state.waiting_queue:
         st.dataframe(pd.DataFrame(st.session_state.waiting_queue)[["id", "name", "target_equip"]], use_container_width=True)
-with right_col:
+
+with col2:
     st.subheader("🟢 復健器材運作狀態區")
     for eq, p in st.session_state.equipment_status.items():
         if p:
-            st.markdown(f"""<div class="status-card"><b>⚙️ {eq}</b><br>👤 {p['name']} 使用中</div>""", unsafe_allow_html=True)
-            if st.button(f"完成 {eq}", key=f"f_{eq}"):
+            st.markdown(f"""<div class="status-card"><b>⚙️ {eq}</b><br>👤 {p['name']} ({p['id']}) 正在使用</div>""", unsafe_allow_html=True)
+            if st.button(f"結束 {eq}", key=f"finish_{eq}"):
+                st.session_state.patient_history.setdefault(p["id"], set()).add(p["target_equip"])
                 st.session_state.equipment_status[eq] = None
                 st.rerun()
         else:
             st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
 
-if need_trigger_rerun: st.rerun()
 time.sleep(1); st.rerun()
