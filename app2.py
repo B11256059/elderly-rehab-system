@@ -105,16 +105,17 @@ st.table(df_prescription)
 # 3. 系統狀態初始化
 # ==========================================
 if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = []  
+if "equipment_status" not in st.session_state: 
+    st.session_state.equipment_status = {
+        "大轉輪-1": None, "大轉輪-2": None,
+        "坐推-1": None, "坐推-2": None, "坐推-3": None,
+        "漫步機-1": None
+    }
 if "start_system_timestamp" not in st.session_state: st.session_state.start_system_timestamp = time.time()  
 if "cooldown_patients" not in st.session_state: st.session_state.cooldown_patients = {}
 if "patient_id_counter" not in st.session_state: st.session_state.patient_id_counter = 1
 if "patient_registry" not in st.session_state: st.session_state.patient_registry = {}
 if "patient_history" not in st.session_state: st.session_state.patient_history = {}
-
-# 這裡是多機台設定：大轉輪x2, 坐推x3, 漫步機x1
-if "equipment_status" not in st.session_state: 
-    equip_config = {"大轉輪": 2, "坐推": 3, "漫步機": 1}
-    st.session_state.equipment_status = {f"{name}_{i+1}": None for name, count in equip_config.items() for i in range(count)}
 
 if "input_last_name" not in st.session_state: st.session_state.input_last_name = ""
 if "input_equips" not in st.session_state: st.session_state.input_equips = []
@@ -138,12 +139,25 @@ def get_or_create_patient_id(last_name, title, age):
     return p_id
 
 def add_patient(p_id, last_name, title, age, selected_equips):
-    for equip in selected_equips:
+    # 定義器材對應群組
+    equip_map = {
+        "大轉輪": ["大轉輪-1", "大轉輪-2"],
+        "坐推": ["坐推-1", "坐推-2", "坐推-3"],
+        "漫步機": ["漫步機-1"]
+    }
+    
+    for base_equip in selected_equips:
+        # 這裡簡單處理：指派該類別下的第一個可用器材
+        # 實際運作時，HRRN 邏輯會自動填補任何空閒的 Key
+        target_eq = equip_map[base_equip][0] 
+        
         st.session_state.waiting_queue.append({
             "id": p_id, "name": f"{last_name}{title}", "age": age,
-            "target_equip": equip, "arrival_time": time.time(),
-            "service_time": lookup_table.get((equip, age), 5),
-            "original_service_time": lookup_table.get((equip, age), 5),
+            "target_equip_base": base_equip, # 記錄原始類別
+            "target_equip": target_eq,        # 實際對應的編號器材
+            "arrival_time": time.time(),
+            "service_time": lookup_table.get((base_equip, age), 5),
+            "original_service_time": lookup_table.get((base_equip, age), 5),
             "is_paused": False,          
             "pause_start_time": 0,      
             "total_paused_duration": 0  
@@ -276,40 +290,55 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
 
 # --- HRRN 核心調度與時間維護邏輯 ---
 now = time.time()
-need_trigger_rerun = False
+need_trigger_rerun = False  # 新增一個標記，用來追蹤是否有人因時間到而下機
 
 for eq, p in list(st.session_state.equipment_status.items()):
     if p:
-        if p.get("is_paused", False) and (now - p["pause_start_time"]) >= MID_PAUSE_SECONDS:
-            p["total_paused_duration"] += MID_PAUSE_SECONDS
-            p["is_paused"] = False
-        
-        if (now - p["start_time"] - p.get("total_paused_duration", 0)) / 60 >= p["service_time"]:
-            st.session_state.patient_history.setdefault(p["id"], set()).add(eq.split('_')[0])
-            st.session_state.cooldown_patients[p["id"]] = now + TRANSIT_COOLDOWN_SECONDS
+        if p.get("is_paused", False):
+            paused_time = now - p["pause_start_time"]
+            if paused_time >= MID_PAUSE_SECONDS:
+                p["total_paused_duration"] += MID_PAUSE_SECONDS
+                p["is_paused"] = False
+                p["pause_start_time"] = 0
+            else:
+                continue
+
+        active_seconds = now - p["start_time"] - p.get("total_paused_duration", 0)
+        if active_seconds / 60 >= p["service_time"]:
+            if p["id"] not in st.session_state.patient_history:
+                st.session_state.patient_history[p["id"]] = set()
+            st.session_state.patient_history[p["id"]].add(eq)
+            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
             st.session_state.equipment_status[eq] = None
-            need_trigger_rerun = True
+            need_trigger_rerun = True  # 自動時間到了，標記需要重繪
 
 if st.session_state.waiting_queue:
     busy_ids = {p["id"] for p in st.session_state.equipment_status.values() if p}
+    now = time.time()
+    
     for p in st.session_state.waiting_queue:
-        p["hrrn_score"] = ((now - p["arrival_time"])/60 + p["service_time"]) / p["service_time"]
+        wait_m = (now - p["arrival_time"]) / 60
+        p["hrrn_score"] = (max(wait_m, 0.001) + p["service_time"]) / p["service_time"]
     
     st.session_state.waiting_queue.sort(key=lambda x: x["hrrn_score"], reverse=True)
+    
     rem_waiting = []
     for p in st.session_state.waiting_queue:
-        slots = [k for k, v in st.session_state.equipment_status.items() if k.startswith(p["target_equip"]) and v is None]
-        if slots and p["id"] not in busy_ids and p["id"] not in st.session_state.cooldown_patients:
-            chosen_eq = slots[0]
+        eq = p["target_equip"]
+        is_cd = p["id"] in st.session_state.cooldown_patients
+        
+        if st.session_state.equipment_status[eq] is None and p["id"] not in busy_ids and not is_cd:
             p["start_time"] = now
-            st.session_state.equipment_status[chosen_eq] = p
+            st.session_state.equipment_status[eq] = p
             busy_ids.add(p["id"])
-            need_trigger_rerun = True
+            need_trigger_rerun = True  # 有新長輩上機，標記需要重繪
         else:
             rem_waiting.append(p)
     st.session_state.waiting_queue = rem_waiting
 
-if need_trigger_rerun: st.rerun()
+# 如果後台邏輯有發生狀態改變，立即重繪畫面，確保按鈕立刻消失/出現
+if need_trigger_rerun:
+    st.rerun()
 
 # ==========================================
 # 7. 前端雙欄看板呈現
