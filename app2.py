@@ -105,7 +105,13 @@ st.table(df_prescription)
 # 3. 系統狀態初始化
 # ==========================================
 if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = []  
-if "equipment_status" not in st.session_state: st.session_state.equipment_status = {"大轉輪": None, "坐推": None, "漫步機": None}
+# 修改：指定器材數量配置
+if "equipment_status" not in st.session_state: 
+    st.session_state.equipment_status = {
+        "大轉輪_1": None, "大轉輪_2": None, 
+        "坐推_1": None, "坐推_2": None, "坐推_3": None, 
+        "漫步機_1": None
+    }
 if "start_system_timestamp" not in st.session_state: st.session_state.start_system_timestamp = time.time()  
 if "cooldown_patients" not in st.session_state: st.session_state.cooldown_patients = {}
 if "patient_id_counter" not in st.session_state: st.session_state.patient_id_counter = 1
@@ -118,7 +124,7 @@ if "form_version" not in st.session_state: st.session_state.form_version = 0
 if "form_status" not in st.session_state: st.session_state.form_status = {"type": None, "msg": None}
 
 TRANSIT_COOLDOWN_SECONDS = 180 # 3分鐘換場休息
-MID_PAUSE_SECONDS = 60          # 中斷休息時間：1分鐘 (60秒)
+MID_PAUSE_SECONDS = 60         # 中斷休息時間：1分鐘 (60秒)
 
 # ==========================================
 # 4. 功能函數
@@ -140,7 +146,7 @@ def add_patient(p_id, last_name, title, age, selected_equips):
             "target_equip": equip, "arrival_time": time.time(),
             "service_time": lookup_table.get((equip, age), 5),
             "original_service_time": lookup_table.get((equip, age), 5),
-            "is_paused": False,          
+            "is_paused": False,         
             "pause_start_time": 0,      
             "total_paused_duration": 0  
         })
@@ -171,7 +177,7 @@ with st.sidebar:
     
     if st.button("🧹 清空所有數據"):
         st.session_state.waiting_queue = []
-        st.session_state.equipment_status = {"大轉輪": None, "坐推": None, "漫步機": None}
+        st.session_state.equipment_status = {eq: None for eq in st.session_state.equipment_status.keys()}
         st.session_state.cooldown_patients = {}
         st.session_state.patient_registry = {}
         st.session_state.patient_history = {}
@@ -229,7 +235,7 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
             else:
                 p_id = get_or_create_patient_id(input_ln.strip(), input_tit, input_age)
                 current_waiting_equips = [p["target_equip"] for p in st.session_state.waiting_queue if p["id"] == p_id]
-                current_using_equips = [eq for eq, p in st.session_state.equipment_status.items() if p and p["id"] == p_id]
+                current_using_equips = [eq.split('_')[0] for eq, p in st.session_state.equipment_status.items() if p and p["id"] == p_id]
                 past_done_equips = st.session_state.patient_history.get(p_id, set())
                 
                 invalid_equips_msg = []
@@ -272,7 +278,7 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
 
 # --- HRRN 核心調度與時間維護邏輯 ---
 now = time.time()
-need_trigger_rerun = False  # 新增一個標記，用來追蹤是否有人因時間到而下機
+need_trigger_rerun = False 
 
 for eq, p in list(st.session_state.equipment_status.items()):
     if p:
@@ -289,10 +295,10 @@ for eq, p in list(st.session_state.equipment_status.items()):
         if active_seconds / 60 >= p["service_time"]:
             if p["id"] not in st.session_state.patient_history:
                 st.session_state.patient_history[p["id"]] = set()
-            st.session_state.patient_history[p["id"]].add(eq)
+            st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
             st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
             st.session_state.equipment_status[eq] = None
-            need_trigger_rerun = True  # 自動時間到了，標記需要重繪
+            need_trigger_rerun = True
 
 if st.session_state.waiting_queue:
     busy_ids = {p["id"] for p in st.session_state.equipment_status.values() if p}
@@ -306,19 +312,23 @@ if st.session_state.waiting_queue:
     
     rem_waiting = []
     for p in st.session_state.waiting_queue:
-        eq = p["target_equip"]
+        target_base = p["target_equip"]
         is_cd = p["id"] in st.session_state.cooldown_patients
         
-        if st.session_state.equipment_status[eq] is None and p["id"] not in busy_ids and not is_cd:
+        # 找尋對應類型的空閒機台
+        available_eqs = [eq for eq, status in st.session_state.equipment_status.items() 
+                         if status is None and eq.startswith(target_base)]
+        
+        if available_eqs and p["id"] not in busy_ids and not is_cd:
+            eq = available_eqs[0]
             p["start_time"] = now
             st.session_state.equipment_status[eq] = p
             busy_ids.add(p["id"])
-            need_trigger_rerun = True  # 有新長輩上機，標記需要重繪
+            need_trigger_rerun = True
         else:
             rem_waiting.append(p)
     st.session_state.waiting_queue = rem_waiting
 
-# 如果後台邏輯有發生狀態改變，立即重繪畫面，確保按鈕立刻消失/出現
 if need_trigger_rerun:
     st.rerun()
 
@@ -344,17 +354,14 @@ with left_col:
 with right_col:
     st.subheader("🟢 復健器材運作狀態區")
     for eq, p in st.session_state.equipment_status.items():
-        # 使用獨立的容器隔離每個器材元件
-        equip_container = st.container()
-        with equip_container:
+        with st.container():
             if p:
                 current_now = time.time()
                 is_currently_paused = p.get("is_paused", False)
                 
                 if is_currently_paused:
                     elapsed = int(p["pause_start_time"] - p["start_time"] - p.get("total_paused_duration", 0))
-                    remaining_pause = int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"]))
-                    remaining_pause = max(0, remaining_pause)
+                    remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
                     
                     st.markdown(f"""
                     <div class="status-card paused">
@@ -374,10 +381,7 @@ with right_col:
                     </div>
                     """, unsafe_allow_html=True)
                 
-                # 只有在使用中 (p 存在) 的狀況下，才建立按鈕欄位
                 c1, c2 = st.columns(2)
-                
-                # 按鈕1: 中斷休息
                 if is_currently_paused:
                     c1.button(f"⏳ 休息中...", key=f"s_{eq}", disabled=True)
                 else:
@@ -386,28 +390,24 @@ with right_col:
                         p["pause_start_time"] = time.time()
                         st.rerun()
                         
-                # 按鈕2: 根據狀態動態調整邏輯
                 if is_currently_paused:
-                    if c2.button(f"▶️ 跳過休息 (繼續復健)", key=f"f_{eq}"):
+                    if c2.button(f"▶️ 跳過休息 (繼續)", key=f"f_{eq}"):
                         actual_paused_seconds = time.time() - p["pause_start_time"]
                         p["total_paused_duration"] += actual_paused_seconds
                         p["is_paused"] = False
                         p["pause_start_time"] = 0
                         st.rerun()
                 else:
-                    if c2.button(f"🐇 已完成目標 (結束)", key=f"f_{eq}"):
+                    if c2.button(f"🐇 已完成目標", key=f"f_{eq}"):
                         if p["id"] not in st.session_state.patient_history:
                             st.session_state.patient_history[p["id"]] = set()
-                        st.session_state.patient_history[p["id"]].add(eq)
-                        
+                        st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
                         st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
                         st.session_state.equipment_status[eq] = None
-                        st.rerun()  # 點擊按鈕的當下立刻強制全頁重刷，將所有按鈕元件完全抹除
+                        st.rerun()
             else:
-                # 當器材空閒 (p 為 None) 時，只顯示空閒卡片。
                 st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8; padding: 25px;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
 
-# 判斷是否需要持續每秒刷新網頁
 has_active = len(st.session_state.waiting_queue) > 0 or any(p is not None for p in st.session_state.equipment_status.values()) or len(st.session_state.cooldown_patients) > 0
 
 if has_active:
