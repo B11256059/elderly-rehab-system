@@ -19,7 +19,7 @@ st.markdown("""
         margin-bottom: 20px;
     }
     .status-card.paused {
-        border-left: 5px solid #eab308; /* 暫停時變成黃色 */
+        border-left: 5px solid #eab308;
         background-color: #fefce8;
     }
     .waiting-row { font-size: 0.9em; padding: 10px; border-bottom: 1px solid #e2e8f0; }
@@ -82,7 +82,7 @@ for item in raw_data:
 st.table(pd.DataFrame(matrix_rows))
 
 # ==========================================
-# 3. 系統狀態初始化
+# 3. 系統狀態初始化 (已修正器材數量)
 # ==========================================
 if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = []  
 if "equipment_status" not in st.session_state: 
@@ -163,7 +163,6 @@ with st.expander("➕ 長輩報到", expanded=True):
         input_ln = col1.text_input("姓氏")
         input_tit = col2.selectbox("稱謂", ["爺爺", "奶奶"])
         input_age = col3.selectbox("年齡層", [60, 70, 80, 90])
-        # 更新器材選單
         input_equips = st.multiselect("復健處方器材", ["大轉輪", "漫步機"])
         if st.form_submit_button("進入排隊"):
             p_id = get_or_create_patient_id(input_ln, input_tit, input_age)
@@ -189,12 +188,15 @@ for p in st.session_state.waiting_queue[:]:
         st.session_state.waiting_queue.remove(p)
 
 # ==========================================
-# 7. 前端呈現
+# 7. 前端呈現 (已修正渲染邏輯)
 # ==========================================
 left_col, right_col = st.columns([1.5, 1])
 with left_col:
     st.subheader("🔴 現場排隊等待區")
-    st.table(pd.DataFrame(st.session_state.waiting_queue)[["id", "name", "target_equip"]] if st.session_state.waiting_queue else "無等待")
+    if st.session_state.waiting_queue:
+        st.table(pd.DataFrame(st.session_state.waiting_queue)[["id", "name", "target_equip"]])
+    else:
+        st.info("目前沒有長輩在排隊等待。")
 
 with right_col:
     st.subheader("🟢 器材狀態")
