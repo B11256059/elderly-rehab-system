@@ -23,6 +23,7 @@ st.markdown("""
         border-left: 5px solid #eab308;
         background-color: #fefce8;
     }
+    .waiting-row { font-size: 0.9em; padding: 10px; border-bottom: 1px solid #e2e8f0; }
     .highlight-text { color: #0e7490; font-weight: bold; }
     .warning-text { color: #b45309; font-weight: bold; }
     </style>
@@ -68,14 +69,25 @@ def extract_number(value):
 
 matrix_rows = []
 lookup_table = {}
+
 for item in raw_data:
     sets = extract_number(item["組數"])
     set_time = extract_number(item["組時間"])
     rest_time = extract_number(item["休息時間"])
     total_seconds = (set_time * sets) + (rest_time * (sets - 1)) if sets > 1 else (set_time * sets)
     total_minutes = round(total_seconds / 60)
+    display_total = str(total_minutes) if total_seconds > 0 else ""
     lookup_table[(item["器材"], item["年齡"])] = total_minutes if total_minutes > 0 else 5
-    matrix_rows.append({"器材名稱": item["器材"], "年齡層": f"{item['年齡']} 歲", "總時間": format_unit(total_minutes, "分")})
+
+    matrix_rows.append({
+        "器材名稱": item["器材"],
+        "年齡層": f"{item['年齡']} 歲",
+        "次數": format_unit(item["次數"], "次"),
+        "組數": format_unit(item["組數"], "組"),
+        "組時間": format_unit(item["組時間"], "秒"),
+        "休息時間": format_unit(item["休息時間"], "秒"),
+        "總時間": format_unit(display_total, "分")
+    })
 
 st.table(pd.DataFrame(matrix_rows))
 
@@ -85,7 +97,9 @@ st.table(pd.DataFrame(matrix_rows))
 if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = []  
 if "equipment_status" not in st.session_state: 
     st.session_state.equipment_status = {
-        "大轉輪_1": None, "坐推_1": None, "坐推_2": None, "坐推_3": None, "漫步機_1": None, "漫步機_2": None
+        "大轉輪_1": None, 
+        "坐推_1": None, "坐推_2": None, "坐推_3": None, 
+        "漫步機_1": None, "漫步機_2": None
     }
 if "start_system_timestamp" not in st.session_state: st.session_state.start_system_timestamp = time.time()  
 if "cooldown_patients" not in st.session_state: st.session_state.cooldown_patients = {}
@@ -117,26 +131,27 @@ def add_patient(p_id, last_name, title, age, selected_equips):
         })
 
 # ==========================================
-# 5. 側邊欄模擬 (自動注入) 與 手動登記表單
+# 5. 側邊欄模擬與控制
 # ==========================================
 with st.sidebar:
-    st.header("👥 模擬情境設定")
-    if st.button("🚀 啟動：長輩陸續報到模擬"):
+    st.header("👥 模擬情境")
+    if st.button("🚀 自動模擬 20 人陸續報到"):
         last_names = ["王", "陳", "林", "張", "李", "吳", "劉", "蔡", "楊", "黃", "曾", "洪", "郭", "馬", "徐", "朱", "胡", "何", "蘇", "葉"]
         equips_base = ["大轉輪", "坐推", "漫步機"]
         for i in range(20):
             ln = last_names[i % len(last_names)]
             tit = random.choice(["爺爺", "奶奶"])
             age = random.choice([60, 70, 80, 90])
-            # 隨機分配 1 到 3 項器材
             eqs = random.sample(equips_base, random.randint(1, 3))
             add_patient(get_or_create_patient_id(ln, tit, age), ln, tit, age, eqs)
             time.sleep(0.3)
             st.rerun()
     
+    st.write("---")
+    st.header("📝 系統控制")
     if st.button("🧹 清空所有數據"):
         st.session_state.waiting_queue = []
-        st.session_state.equipment_status = {k: None for k in st.session_state.equipment_status}
+        st.session_state.equipment_status = {eq: None for eq in st.session_state.equipment_status.keys()}
         st.session_state.cooldown_patients = {}
         st.session_state.patient_registry = {}
         st.session_state.patient_history = {}
@@ -144,20 +159,8 @@ with st.sidebar:
         st.session_state.start_system_timestamp = time.time()
         st.rerun()
 
-    st.write("---")
-    st.header("📝 手動登記")
-    with st.form("manual_reg"):
-        ln = st.text_input("姓氏")
-        tit = st.selectbox("稱謂", ["爺爺", "奶奶"])
-        age = st.selectbox("年齡層", [60, 70, 80, 90])
-        eqs = st.multiselect("復健處方器材", ["大轉輪", "坐推", "漫步機"])
-        if st.form_submit_button("登記加入排程"):
-            if ln and eqs:
-                add_patient(get_or_create_patient_id(ln, tit, age), ln, tit, age, eqs)
-                st.rerun()
-
 # ==========================================
-# 6. 主要看板內容區 (HRRN調度邏輯)
+# 6. 主要看板內容區
 # ==========================================
 st.write("---")
 m1, m2, m3 = st.columns(3)
@@ -168,7 +171,7 @@ now_time = time.time()
 st.session_state.cooldown_patients = {k: v for k, v in st.session_state.cooldown_patients.items() if now_time < v}
 m3.metric("換場休息中", f"{len(st.session_state.cooldown_patients)} 人")
 
-# --- HRRN 核心調度 ---
+# --- HRRN 核心調度邏輯 ---
 now = time.time()
 need_trigger_rerun = False 
 for eq, p in list(st.session_state.equipment_status.items()):
@@ -189,7 +192,6 @@ if st.session_state.waiting_queue:
         wait_m = (now - p["arrival_time"]) / 60
         p["hrrn_score"] = (max(wait_m, 0.001) + p["service_time"]) / p["service_time"]
     st.session_state.waiting_queue.sort(key=lambda x: x["hrrn_score"], reverse=True)
-    
     rem_waiting = []
     for p in st.session_state.waiting_queue:
         available_eqs = [eq for eq, s in st.session_state.equipment_status.items() if s is None and eq.startswith(p["target_equip"])]
@@ -206,7 +208,7 @@ if st.session_state.waiting_queue:
 if need_trigger_rerun: st.rerun()
 
 # ==========================================
-# 7. 畫面呈現
+# 7. 前端呈現 (維持原始雙欄布局)
 # ==========================================
 left_col, right_col = st.columns([1.2, 1])
 with left_col:
