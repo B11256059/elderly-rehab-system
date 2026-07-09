@@ -155,24 +155,33 @@ def add_patient(p_id, last_name, title, age, selected_equips):
 # ==========================================
 with st.sidebar:
     st.header("👥 模擬情境")
-    if st.button("🚀 注入 20 位長輩數據"):
-        mock_list = [
-            ("王", "爺爺", 70, ["大轉輪", "坐推"]), ("陳", "奶奶", 60, ["坐推", "漫步機"]),
-            ("林", "爺爺", 80, ["漫步機"]), ("張", "奶奶", 90, ["大轉輪", "漫步機"]),
-            ("李", "爺爺", 60, ["大轉輪", "坐推", "漫步機"]), ("吳", "爺爺", 70, ["坐推"]),
-            ("劉", "奶奶", 80, ["大轉輪"]), ("蔡", "爺爺", 90, ["漫步機"]),
-            ("楊", "奶奶", 70, ["大轉輪", "坐推"]), ("黃", "爺爺", 80, ["坐推"]),
-            ("曾", "奶奶", 60, ["漫步機"]), ("洪", "爺爺", 70, ["大轉輪"]),
-            ("郭", "奶奶", 80, ["漫步機"]), ("馬", "爺爺", 90, ["大轉輪", "坐推"]),
-            ("徐", "奶奶", 60, ["漫步機"]), ("朱", "爺爺", 70, ["坐推"]),
-            ("胡", "奶奶", 80, ["大轉輪", "漫步機"]), ("何", "爺爺", 90, ["大轉輪"]),
-            ("蘇", "奶奶", 60, ["漫步機"]), ("葉", "爺爺", 70, ["大轉輪"])
-        ]
-        for ln_m, tit_m, age_m, eqs_m in mock_list:
-            p_id_m = get_or_create_patient_id(ln_m, tit_m, age_m)
-            add_patient(p_id_m, ln_m, tit_m, age_m, eqs_m)
-        st.session_state.form_status = {"type": None, "msg": None}
-        st.rerun()
+    
+    # 確保模擬狀態在 session_state 中
+    if "total_mock_count" not in st.session_state: st.session_state.total_mock_count = 0
+    
+    st.write(f"當前已模擬人數: {st.session_state.total_mock_count} / 20")
+    
+    if st.button("🚀 分批注入 (3-5人)"):
+        if st.session_state.total_mock_count < 20:
+            last_names = ["王", "陳", "林", "張", "李", "吳", "劉", "蔡", "楊", "黃", "曾", "洪", "郭", "馬", "徐", "朱", "胡", "何", "蘇", "葉"]
+            equips_base = ["大轉輪", "坐推", "漫步機"]
+            
+            # 決定本次注入人數 (3-5人，但不超過總額20)
+            batch_size = min(random.randint(3, 5), 20 - st.session_state.total_mock_count)
+            
+            for _ in range(batch_size):
+                ln = random.choice(last_names)
+                tit = random.choice(["爺爺", "奶奶"])
+                age = random.choice([60, 70, 80, 90])
+                eqs = random.sample(equips_base, random.randint(1, 3))
+                
+                p_id = get_or_create_patient_id(ln, tit, age)
+                add_patient(p_id, ln, tit, age, eqs)
+                st.session_state.total_mock_count += 1
+            
+            st.rerun()
+        else:
+            st.warning("已達模擬上限 20 人！")
     
     if st.button("🧹 清空所有數據"):
         st.session_state.waiting_queue = []
@@ -181,6 +190,7 @@ with st.sidebar:
         st.session_state.patient_registry = {}
         st.session_state.patient_history = {}
         st.session_state.patient_id_counter = 1
+        st.session_state.total_mock_count = 0 # 重置模擬計數
         st.session_state.start_system_timestamp = time.time()
         st.session_state.form_status = {"type": None, "msg": None}
         st.session_state.input_last_name = ""
@@ -316,7 +326,7 @@ if st.session_state.waiting_queue:
         
         # 找尋對應類型的空閒機台
         available_eqs = [eq for eq, status in st.session_state.equipment_status.items() 
-                         if status is None and eq.startswith(target_base)]
+                        if status is None and eq.startswith(target_base)]
         
         if available_eqs and p["id"] not in busy_ids and not is_cd:
             eq = available_eqs[0]
