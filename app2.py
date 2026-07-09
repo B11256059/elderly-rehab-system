@@ -105,12 +105,12 @@ st.table(df_prescription)
 # 3. 系統狀態初始化
 # ==========================================
 if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = []  
-# 修改：指定器材數量配置
+# 修改：調整為 大轉輪1台、坐推3台、漫步機2台
 if "equipment_status" not in st.session_state: 
     st.session_state.equipment_status = {
-        "大轉輪_1": None, "大轉輪_2": None, 
+        "大轉輪_1": None, 
         "坐推_1": None, "坐推_2": None, "坐推_3": None, 
-        "漫步機_1": None
+        "漫步機_1": None, "漫步機_2": None
     }
 if "start_system_timestamp" not in st.session_state: st.session_state.start_system_timestamp = time.time()  
 if "cooldown_patients" not in st.session_state: st.session_state.cooldown_patients = {}
@@ -146,7 +146,7 @@ def add_patient(p_id, last_name, title, age, selected_equips):
             "target_equip": equip, "arrival_time": time.time(),
             "service_time": lookup_table.get((equip, age), 5),
             "original_service_time": lookup_table.get((equip, age), 5),
-            "is_paused": False,         
+            "is_paused": False,        
             "pause_start_time": 0,      
             "total_paused_duration": 0  
         })
