@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 import time
+import random
 from datetime import datetime
 
 # ==========================================
@@ -105,6 +106,7 @@ st.table(df_prescription)
 # 3. 系統狀態初始化
 # ==========================================
 if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = []  
+if "total_mock_count" not in st.session_state: st.session_state.total_mock_count = 0
 if "equipment_status" not in st.session_state: 
     st.session_state.equipment_status = {
         "大轉輪_1": None, 
@@ -155,10 +157,6 @@ def add_patient(p_id, last_name, title, age, selected_equips):
 # ==========================================
 with st.sidebar:
     st.header("👥 模擬情境")
-    
-    # 確保模擬狀態在 session_state 中
-    if "total_mock_count" not in st.session_state: st.session_state.total_mock_count = 0
-    
     st.write(f"當前已模擬人數: {st.session_state.total_mock_count} / 20")
     
     if st.button("🚀 分批注入 (3-5人)"):
@@ -166,8 +164,9 @@ with st.sidebar:
             last_names = ["王", "陳", "林", "張", "李", "吳", "劉", "蔡", "楊", "黃", "曾", "洪", "郭", "馬", "徐", "朱", "胡", "何", "蘇", "葉"]
             equips_base = ["大轉輪", "坐推", "漫步機"]
             
-            # 決定本次注入人數 (3-5人，但不超過總額20)
-            batch_size = min(random.randint(3, 5), 20 - st.session_state.total_mock_count)
+            # 計算剩餘可加入名額
+            remaining = 20 - st.session_state.total_mock_count
+            batch_size = min(random.randint(3, 5), remaining)
             
             for _ in range(batch_size):
                 ln = random.choice(last_names)
@@ -190,7 +189,7 @@ with st.sidebar:
         st.session_state.patient_registry = {}
         st.session_state.patient_history = {}
         st.session_state.patient_id_counter = 1
-        st.session_state.total_mock_count = 0 # 重置模擬計數
+        st.session_state.total_mock_count = 0 
         st.session_state.start_system_timestamp = time.time()
         st.session_state.form_status = {"type": None, "msg": None}
         st.session_state.input_last_name = ""
