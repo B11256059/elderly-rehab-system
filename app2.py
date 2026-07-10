@@ -365,27 +365,34 @@ with right_col:
                 current_now = time.time()
                 is_currently_paused = p.get("is_paused", False)
                 
-                # 判斷是否已經開始復健
+                # --- 判斷是否已經開始復健 ---
                 if not p.get("is_started", False):
-                    # --- 等待開始區塊 (包含自動釋放邏輯) ---
-                    wait_time = current_now - p["arrival_time"]
+                    # 確保有 assigned_time (計算逾時的基準)
+                    if "assigned_time" not in p: p["assigned_time"] = time.time()
+                    wait_time = current_now - p.get("assigned_time", current_now)
                     
-                    # 超過 90 秒自動釋放
+                    # 90 秒後強制釋放並從排隊序列中「徹底清除該長輩的所有排隊項目」
                     if wait_time > 90:
+                        # 徹底將此長輩從等待隊列移除
+                        st.session_state.waiting_queue = [
+                            item for item in st.session_state.waiting_queue 
+                            if item["id"] != p["id"]
+                        ]
+                        # 釋放當前機台
                         st.session_state.equipment_status[eq] = None
                         st.rerun()
                     
-                    # 視覺效果：超過 60 秒變紅色提示
+                    # 視覺效果：超過 60 秒變紅，顯示倒數
                     bg_color = "#fee2e2" if wait_time > 60 else "#eff6ff"
                     border_color = "#ef4444" if wait_time > 60 else "#3b82f6"
+                    
+                    status_text = f'⏳ 逾時自動釋放倒數: {int(90 - wait_time)}秒' if wait_time > 60 else '等待開始復健...'
                     
                     st.markdown(f"""
                     <div class="status-card" style="background-color: {bg_color}; border-left: 5px solid {border_color};">
                         <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                         👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [{p['id']}]</span><br>
-                        狀態: <span style="color:{'#b91c1c' if wait_time > 60 else '#1d4ed8'}; font-weight:bold;">
-                        {f'⏳ 逾時自動釋放倒數: {int(90 - wait_time)}秒' if wait_time > 60 else '等待開始復健...'}
-                        </span>
+                        狀態: <span style="color:{'#b91c1c' if wait_time > 60 else '#1d4ed8'}; font-weight:bold;">{status_text}</span>
                     </div>
                     """, unsafe_allow_html=True)
                     
@@ -427,19 +434,16 @@ with right_col:
                             st.rerun()
                             
                     if is_currently_paused:
-                        # 跳過休息按鈕
                         if c2.button(f"▶️ 跳過休息 (繼續)", key=f"f_{eq}"):
                             p["total_paused_duration"] += (time.time() - p["pause_start_time"])
                             p["is_paused"] = False
                             p["pause_start_time"] = 0
                             st.rerun()
                     else:
-                        # 已完成目標按鈕
                         if c2.button(f"🐇 已完成目標", key=f"f_{eq}"):
                             if p["id"] not in st.session_state.patient_history:
                                 st.session_state.patient_history[p["id"]] = set()
                             st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
-                            # 進入換場休息冷卻
                             st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
                             st.session_state.equipment_status[eq] = None
                             st.rerun()
