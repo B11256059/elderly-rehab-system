@@ -360,47 +360,81 @@ with left_col:
 with right_col:
     st.subheader("🟢 復健器材運作狀態區")
     for eq, p in st.session_state.equipment_status.items():
-        current_now = time.time()
-        
-        # 1. 狀態判斷與樣式邏輯
-        if not p:
-            bg_color, border_color = "#f0fdf4", "#22c55e"
-            status_html = "🟢 目前空閒中，歡迎使用"
-            st.markdown(f'''<div class="status-card" style="background-color: {bg_color}; border-left: 5px solid {border_color}; margin-bottom: 10px; padding: 15px; border-radius: 8px;"><b>⚙️ {eq}</b><br>{status_html}</div>''', unsafe_allow_html=True)
-        else:
-            is_paused, started = p.get("is_paused", False), p.get("is_started", False)
-            if not started:
-                wait_time = current_now - p["arrival_time"]
-                if wait_time > 90: st.session_state.equipment_status[eq] = None; st.rerun()
-                if wait_time > 60:
-                    bg_color, border_color = "#fee2e2", "#ef4444"
-                    status_html = f"👤 {p['name']} ({p['age']}歲) [{p['id']}]<br><span style='color:#b91c1c; font-weight:bold;'>⏳ 逾時倒數: {int(90 - wait_time)}秒</span>"
+        with st.container():
+            if p:
+                current_now = time.time()
+                is_currently_paused = p.get("is_paused", False)
+                
+                # 判斷是否已經開始復健
+                if not p.get("is_started", False):
+                    # --- 等待開始區塊 (加入變色與自動釋放) ---
+                    wait_time = current_now - p["arrival_time"]
+                    if wait_time > 90:
+                        st.session_state.equipment_status[eq] = None
+                        st.rerun()
+                    
+                    bg_color = "#fee2e2" if wait_time > 60 else "#eff6ff"
+                    border_color = "#ef4444" if wait_time > 60 else "#3b82f6"
+                    status_text = f"⏳ 逾時倒數: {int(90 - wait_time)}秒" if wait_time > 60 else "等待開始復健..."
+                    
+                    st.markdown(f"""
+                    <div class="status-card" style="background-color: {bg_color}; border-left: 5px solid {border_color}; padding: 15px; margin-bottom: 10px;">
+                        <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
+                        👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [{p['id']}]</span><br>
+                        狀態: <span style="color:{'#b91c1c' if wait_time > 60 else '#1d4ed8'}; font-weight:bold;">{status_text}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.button(f"▶️ 開始復健", key=f"start_{eq}"):
+                        p["is_started"] = True
+                        p["start_time"] = time.time()
+                        st.rerun()
+                
                 else:
-                    bg_color, border_color = "#eff6ff", "#3b82f6"
-                    status_html = f"👤 {p['name']} ({p['age']}歲) [{p['id']}]<br>▶️ 等待開始復健..."
-                st.markdown(f'''<div class="status-card" style="background-color: {bg_color}; border-left: 5px solid {border_color}; margin-bottom: 10px; padding: 15px; border-radius: 8px;"><b>⚙️ {eq}</b><br>{status_html}</div>''', unsafe_allow_html=True)
-                if st.button("▶️ 開始復健", key=f"start_{eq}"): p["is_started"]=True; p["start_time"]=time.time(); st.rerun()
-            elif is_paused:
-                elapsed = int(p["pause_start_time"] - p["start_time"] - p.get("total_paused_duration", 0))
-                rem_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
-                bg_color, border_color = "#fefce8", "#eab308"
-                status_html = f"👤 {p['name']} ({p['age']}歲) [{p['id']}]<br>⏱️ 已執行: {elapsed//60}分{elapsed%60}秒 (休息倒數: {rem_pause}秒)"
-                st.markdown(f'''<div class="status-card" style="background-color: {bg_color}; border-left: 5px solid {border_color}; margin-bottom: 10px; padding: 15px; border-radius: 8px;"><b>⚙️ {eq}</b><br>{status_html}</div>''', unsafe_allow_html=True)
-                if st.button("▶️ 跳過休息 (繼續)", key=f"res_{eq}"): p["total_paused_duration"]+=(time.time()-p["pause_start_time"]); p["is_paused"]=False; st.rerun()
+                    # --- 已開始復健區塊 ---
+                    if is_currently_paused:
+                        elapsed = int(p["pause_start_time"] - p["start_time"] - p.get("total_paused_duration", 0))
+                        remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
+                        st.markdown(f"""
+                        <div class="status-card paused" style="background-color: #fefce8; border-left: 5px solid #eab308; padding: 15px; margin-bottom: 10px;">
+                            <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
+                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [{p['id']}]</span><br>
+                            ⏱️ 實際已執行: {elapsed//60}分{elapsed%60}秒 <span class="warning-text">(休息倒數: {remaining_pause}秒)</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        elapsed = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
+                        st.markdown(f"""
+                        <div class="status-card" style="background-color: #ffffff; border-left: 5px solid #10b981; padding: 15px; margin-bottom: 10px;">
+                            <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
+                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [{p['id']}]</span><br>
+                            ⏱️ 已執行: {elapsed//60}分{elapsed%60}秒 / 處方預計: {p['service_time']}分鐘
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # 按鈕排列
+                    c1, c2 = st.columns(2)
+                    if is_currently_paused:
+                        if c2.button(f"▶️ 跳過休息 (繼續)", key=f"res_{eq}"):
+                            p["total_paused_duration"] += (time.time() - p["pause_start_time"])
+                            p["is_paused"] = False
+                            p["pause_start_time"] = 0
+                            st.rerun()
+                    else:
+                        if c1.button(f"⏸️ 中斷休息", key=f"s_{eq}"):
+                            p["is_paused"] = True
+                            p["pause_start_time"] = time.time()
+                            st.rerun()
+                        if c2.button(f"🐇 已完成目標", key=f"f_{eq}"):
+                            if p["id"] not in st.session_state.patient_history:
+                                st.session_state.patient_history[p["id"]] = set()
+                            st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
+                            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
+                            st.session_state.equipment_status[eq] = None
+                            st.rerun()
             else:
-                elapsed = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
-                bg_color, border_color = "#ffffff", "#10b981"
-                status_html = f"👤 {p['name']} ({p['age']}歲) [{p['id']}]<br>⏱️ 已執行: {elapsed//60}分{elapsed%60}秒 / 目標: {p['service_time']}分"
-                st.markdown(f'''<div class="status-card" style="background-color: {bg_color}; border-left: 5px solid {border_color}; margin-bottom: 10px; padding: 15px; border-radius: 8px;"><b>⚙️ {eq}</b><br>{status_html}</div>''', unsafe_allow_html=True)
-                c1, c2 = st.columns(2)
-                if c1.button("⏸️ 中斷休息", key=f"s_{eq}"): p["is_paused"]=True; p["pause_start_time"]=time.time(); st.rerun()
-                if c2.button("🐇 已完成目標", key=f"f_{eq}"): 
-                    st.session_state.patient_history.setdefault(p["id"], set()).add(eq.split('_')[0])
-                    st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
-                    st.session_state.equipment_status[eq] = None; st.rerun()
-            else:
-                st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8; padding: 25px;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
-has_active = len(st.session_state.waiting_queue) > 0 or any(p is not None for p in st.session_state.equipment_status.values()) or len(st.session_state.cooldown_patients) > 0
+                # --- 空閒狀態 ---
+                st.markdown(f"""<div class="status-card" style="background-color: #f0fdf4; border-left: 5px solid #22c55e; color: #166534; padding: 25px; margin-bottom: 10px;"><b>⚙️ {eq}</b><br>🟢 目前空閒中，歡迎使用</div>""", unsafe_allow_html=True)
 
 if has_active:
     time.sleep(1)
