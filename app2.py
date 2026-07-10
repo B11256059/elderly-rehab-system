@@ -444,7 +444,7 @@ with right_col:
                             st.session_state.equipment_status[eq] = None
                             st.rerun()
             else:
-                st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8; padding: 25px;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class="status-card" style="background-color: #f0fdf4; border-left: 5px solid #22c55e; padding: 25px;"><b style='font-size:1.2em;'>⚙️ {eq}</b><br><span style="color: #166534; font-weight: bold;">🟢 目前空閒中，歡迎使用</span></div>""", unsafe_allow_html=True)
 
 has_active = len(st.session_state.waiting_queue) > 0 or any(p is not None for p in st.session_state.equipment_status.values()) or len(st.session_state.cooldown_patients) > 0
 
