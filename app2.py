@@ -384,7 +384,6 @@ with right_col:
                 # 若已經開始，顯示計時與控制按鈕
                 else:
                     if is_currently_paused:
-                        # 計算休息剩餘時間
                         elapsed = int(p["pause_start_time"] - p["start_time"] - p.get("total_paused_duration", 0))
                         remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
                         st.markdown(f"""
@@ -414,13 +413,21 @@ with right_col:
                             p["pause_start_time"] = time.time()
                             st.rerun()
                             
-                    if c2.button(f"🐇 已完成目標", key=f"f_{eq}"):
-                        if p["id"] not in st.session_state.patient_history:
-                            st.session_state.patient_history[p["id"]] = set()
-                        st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
-                        st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
-                        st.session_state.equipment_status[eq] = None
-                        st.rerun()
+                    if is_currently_paused:
+                        if c2.button(f"▶️ 跳過休息 (繼續)", key=f"f_{eq}"):
+                            actual_paused_seconds = time.time() - p["pause_start_time"]
+                            p["total_paused_duration"] += actual_paused_seconds
+                            p["is_paused"] = False
+                            p["pause_start_time"] = 0
+                            st.rerun()
+                    else:
+                        if c2.button(f"🐇 已完成目標", key=f"f_{eq}"):
+                            if p["id"] not in st.session_state.patient_history:
+                                st.session_state.patient_history[p["id"]] = set()
+                            st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
+                            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
+                            st.session_state.equipment_status[eq] = None
+                            st.rerun()
             else:
                 st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8; padding: 25px;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
 
