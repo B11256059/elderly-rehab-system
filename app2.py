@@ -428,7 +428,7 @@ with right_col:
                     if is_currently_paused:
                         c1.button(f"⏳ 休息中...", key=f"s_{eq}", disabled=True)
                     else:
-                        if c1.button(f"⏸️ 中斷休息", key=f"s_{eq}"):
+                        if c1.button(f"⏸️ 中斷休息 (1分鐘)", key=f"s_{eq}"):
                             p["is_paused"] = True
                             p["pause_start_time"] = time.time()
                             st.rerun()
