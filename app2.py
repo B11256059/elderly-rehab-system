@@ -372,7 +372,7 @@ with right_col:
                     st.markdown(f"""
                     <div class="status-card" style="border-left: 5px solid #3b82f6;">
                         <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                        👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲)</span><br>
+                        👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [{p['id']}]</span><br>
                         狀態: <span class="warning-text">等待開始復健...</span>
                     </div>
                     """, unsafe_allow_html=True)
@@ -384,12 +384,14 @@ with right_col:
                 # 若已經開始，顯示計時與控制按鈕
                 else:
                     if is_currently_paused:
+                        # 計算休息剩餘時間
                         elapsed = int(p["pause_start_time"] - p["start_time"] - p.get("total_paused_duration", 0))
+                        remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
                         st.markdown(f"""
                         <div class="status-card paused">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                            👤 使用者: <span class="highlight-text">{p['name']}</span><br>
-                            ⏱️ 實際已執行: {elapsed//60}分{elapsed%60}秒 <span class="warning-text">(休息中)</span>
+                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [{p['id']}]</span><br>
+                            ⏱️ 實際已執行: {elapsed//60}分{elapsed%60}秒 <span class="warning-text">(休息倒數: {remaining_pause}秒)</span>
                         </div>
                         """, unsafe_allow_html=True)
                     else:
@@ -397,12 +399,12 @@ with right_col:
                         st.markdown(f"""
                         <div class="status-card">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                            👤 使用者: <span class="highlight-text">{p['name']}</span><br>
-                            ⏱️ 已執行: {elapsed//60}分{elapsed%60}秒
+                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [{p['id']}]</span><br>
+                            ⏱️ 已執行: {elapsed//60}分{elapsed%60}秒 / 處方預計: {p['service_time']}分鐘
                         </div>
                         """, unsafe_allow_html=True)
                     
-                    # 按鈕排列：中斷休息在左邊，已完成在右邊
+                    # 按鈕排列
                     c1, c2 = st.columns(2)
                     if is_currently_paused:
                         c1.button(f"⏳ 休息中...", key=f"s_{eq}", disabled=True)
