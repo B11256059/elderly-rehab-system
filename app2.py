@@ -348,16 +348,14 @@ left_col, right_col = st.columns([1.2, 1])
 
 with left_col:
     st.subheader("🔴 現場排隊等待區")
-    if not st.session_state.waiting_queue:
-        st.info("目前沒有長輩在排隊等待。")
-    else:
+    if st.session_state.waiting_queue:
+        # 顯示排隊名單，包含使用者資訊
         df = pd.DataFrame(st.session_state.waiting_queue)
-        df["等待時間"] = ((time.time() - df["arrival_time"]) // 1).astype(int).apply(lambda x: f"{x}秒")
-        df["年齡顯示"] = df["age"].apply(lambda x: f"{x}歲")
-        
-        st.dataframe(df[["id", "name", "年齡顯示", "target_equip", "等待時間", "hrrn_score"]].rename(columns={
-            "id":"長輩編號", "name":"姓名", "年齡顯示":"年齡", "target_equip":"目標器材", "hrrn_score":"優先權分數(HRRN)"
-        }), hide_index=True, use_container_width=True)
+        # 為了呈現美觀，我們可以自定義顯示格式
+        display_df = df[["id", "name", "target_equip", "hrrn_score"]]
+        st.dataframe(display_df, use_container_width=True)
+    else:
+        st.info("目前無人排隊")
 
 with right_col:
     st.subheader("🟢 復健器材運作狀態區")
@@ -367,22 +365,37 @@ with right_col:
                 current_now = time.time()
                 is_currently_paused = p.get("is_paused", False)
                 
-                # 判斷是否已經開始
+                # 判斷是否已經開始復健
                 if not p.get("is_started", False):
+                    # --- 等待開始區塊 (包含自動釋放邏輯) ---
+                    wait_time = current_now - p["arrival_time"]
+                    
+                    # 超過 90 秒自動釋放
+                    if wait_time > 90:
+                        st.session_state.equipment_status[eq] = None
+                        st.rerun()
+                    
+                    # 視覺效果：超過 60 秒變紅色提示
+                    bg_color = "#fee2e2" if wait_time > 60 else "#eff6ff"
+                    border_color = "#ef4444" if wait_time > 60 else "#3b82f6"
+                    
                     st.markdown(f"""
-                    <div class="status-card" style="border-left: 5px solid #3b82f6;">
+                    <div class="status-card" style="background-color: {bg_color}; border-left: 5px solid {border_color};">
                         <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                         👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [{p['id']}]</span><br>
-                        狀態: <span class="warning-text">等待開始復健...</span>
+                        狀態: <span style="color:{'#b91c1c' if wait_time > 60 else '#1d4ed8'}; font-weight:bold;">
+                        {f'⏳ 逾時自動釋放倒數: {int(90 - wait_time)}秒' if wait_time > 60 else '等待開始復健...'}
+                        </span>
                     </div>
                     """, unsafe_allow_html=True)
+                    
                     if st.button(f"▶️ 開始復健", key=f"start_{eq}"):
                         p["is_started"] = True
                         p["start_time"] = time.time()
                         st.rerun()
                 
-                # 若已經開始，顯示計時與控制按鈕
                 else:
+                    # --- 已開始復健區塊 ---
                     if is_currently_paused:
                         elapsed = int(p["pause_start_time"] - p["start_time"] - p.get("total_paused_duration", 0))
                         remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
@@ -408,23 +421,25 @@ with right_col:
                     if is_currently_paused:
                         c1.button(f"⏳ 休息中...", key=f"s_{eq}", disabled=True)
                     else:
-                        if c1.button(f"⏸️ 中斷休息 (1分鐘)", key=f"s_{eq}"):
+                        if c1.button(f"⏸️ 中斷休息", key=f"s_{eq}"):
                             p["is_paused"] = True
                             p["pause_start_time"] = time.time()
                             st.rerun()
                             
                     if is_currently_paused:
+                        # 跳過休息按鈕
                         if c2.button(f"▶️ 跳過休息 (繼續)", key=f"f_{eq}"):
-                            actual_paused_seconds = time.time() - p["pause_start_time"]
-                            p["total_paused_duration"] += actual_paused_seconds
+                            p["total_paused_duration"] += (time.time() - p["pause_start_time"])
                             p["is_paused"] = False
                             p["pause_start_time"] = 0
                             st.rerun()
                     else:
+                        # 已完成目標按鈕
                         if c2.button(f"🐇 已完成目標", key=f"f_{eq}"):
                             if p["id"] not in st.session_state.patient_history:
                                 st.session_state.patient_history[p["id"]] = set()
                             st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
+                            # 進入換場休息冷卻
                             st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
                             st.session_state.equipment_status[eq] = None
                             st.rerun()
