@@ -349,11 +349,23 @@ left_col, right_col = st.columns([1.2, 1])
 with left_col:
     st.subheader("🔴 現場排隊等待區")
     if st.session_state.waiting_queue:
-        # 顯示排隊名單，包含使用者資訊
-        df = pd.DataFrame(st.session_state.waiting_queue)
-        # 為了呈現美觀，我們可以自定義顯示格式
-        display_df = df[["id", "name", "target_equip", "hrrn_score"]]
-        st.dataframe(display_df, use_container_width=True)
+        # 計算等待時間並準備顯示資料
+        now = time.time()
+        display_data = []
+        for p in st.session_state.waiting_queue:
+            wait_seconds = int(now - p["arrival_time"])
+            display_data.append({
+                "長輩編號": p["id"],
+                "姓名": p["name"],
+                "年齡": f"{p['age']}歲",
+                "目標器材": p["target_equip"],
+                "等待時間": f"{wait_seconds}秒",
+                "優先權分數(HRRN)": round(p.get("hrrn_score", 0), 4)
+            })
+        
+        # 轉換為 DataFrame 並顯示
+        df_display = pd.DataFrame(display_data)
+        st.table(df_display) # 使用 st.table 呈現如圖片般的靜態表格樣式
     else:
         st.info("目前無人排隊")
 
