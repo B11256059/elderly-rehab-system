@@ -313,6 +313,11 @@ if st.session_state.waiting_queue:
     now = time.time()
     
     for p in st.session_state.waiting_queue:
+        # --- 修正：如果該長輩目前正在使用器材，不計算分數並跳過 ---
+        if p["id"] in busy_ids:
+            p["hrrn_score"] = 0.0  # 設為 0 分，不參與排序
+            continue
+            
         wait_seconds = now - p["arrival_time"]
         wait_m = wait_seconds / 60
         
