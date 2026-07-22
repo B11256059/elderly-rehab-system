@@ -314,14 +314,15 @@ if st.session_state.waiting_queue:
     
     for p in st.session_state.waiting_queue:
         if p["id"] in busy_ids:
-            # 如果正在忙，不增加等待時間，分數維持不變或歸零
+            # --- 關鍵修正：如果長輩正在使用其他機台，把 arrival_time 往後推，讓等待時間「凍結」不增加 ---
+            p["arrival_time"] = now - (p.get("frozen_wait_seconds", 0))
             p["hrrn_score"] = 0.0
             continue
             
-        # 如果沒有在忙，我們需要扣除他之前已經累積過的忙碌時間（或者用arrival_time去算，但要加上修正）
-        # 這裡最簡單的作法是：當他進入忙碌時，我們把當下的等待時間「凍結」
-            
+        # 記錄當前的等待秒數備用
         wait_seconds = now - p["arrival_time"]
+        p["frozen_wait_seconds"] = wait_seconds
+        
         wait_m = wait_seconds / 60
         
         # --- Aging 機制：等待超過 15 分鐘 (900秒) 強制賦予最高優先權 ---
