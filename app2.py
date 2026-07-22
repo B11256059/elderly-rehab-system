@@ -313,8 +313,14 @@ if st.session_state.waiting_queue:
     now = time.time()
     
     for p in st.session_state.waiting_queue:
-        wait_m = (now - p["arrival_time"]) / 60
-        p["hrrn_score"] = (max(wait_m, 0.001) + p["service_time"]) / p["service_time"]
+        wait_seconds = now - p["arrival_time"]
+        wait_m = wait_seconds / 60
+        
+        # --- Aging 機制：等待超過 15 分鐘 (900秒) 強制賦予最高優先權 ---
+        if wait_seconds >= 900:
+            p["hrrn_score"] = 999.0  # 強制拉到最前面，不受 4 分或 8 分鐘分母影響
+        else:
+            p["hrrn_score"] = (max(wait_m, 0.001) + p["service_time"]) / p["service_time"]
     
     st.session_state.waiting_queue.sort(key=lambda x: x["hrrn_score"], reverse=True)
     
