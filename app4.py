@@ -383,6 +383,7 @@ for idx, eq_type in enumerate(equip_types):
                 display_data.append({
                     "編號": p["id"],
                     "姓名": p["name"],
+                    "年齡": f"{p['age']}歲",
                     "等待": f"{wait_seconds}秒",
                     "HRRN": round(p.get("hrrn_score", 0), 2)
                 })
