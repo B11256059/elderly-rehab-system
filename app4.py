@@ -23,7 +23,6 @@ st.markdown("""
         border-left: 5px solid #eab308; /* 暫停時變成黃色 */
         background-color: #fefce8;
     }
-    .waiting-row { font-size: 0.9em; padding: 10px; border-bottom: 1px solid #e2e8f0; }
     .highlight-text { color: #0e7490; font-weight: bold; }
     .warning-text { color: #b45309; font-weight: bold; }
     </style>
@@ -361,30 +360,36 @@ if need_trigger_rerun:
     st.rerun()
 
 # ==========================================
-# 7. 前端上下排版呈現（表格排隊區 + 下方狀態區）
+# 7. 前端上下排版呈現（五欄並排表格等待區 + 下方狀態區）
 # ==========================================
 
-# 【上方區塊】現場排隊等待區 (使用原本的表格呈現)
+# 【上方區塊】五大器材獨立的欄位與表格等待區
 st.write("---")
-st.subheader("🔴 現場排隊等待區")
-if st.session_state.waiting_queue:
-    now = time.time()
-    display_data = []
-    for p in st.session_state.waiting_queue:
-        wait_seconds = int(now - p["arrival_time"])
-        display_data.append({
-            "長輩編號": p["id"],
-            "姓名": p["name"],
-            "年齡": f"{p['age']}歲",
-            "目標器材": p["target_equip"],
-            "等待時間": f"{wait_seconds}秒",
-            "優先權分數(HRRN)": round(p.get("hrrn_score", 0), 4)
-        })
-    
-    df_display = pd.DataFrame(display_data)
-    st.table(df_display) 
-else:
-    st.info("目前無人排隊")
+st.subheader("🔴 現場排隊等待區（五大器材獨立表格）")
+
+equip_types = ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]
+queue_cols = st.columns(5)
+
+for idx, eq_type in enumerate(equip_types):
+    with queue_cols[idx]:
+        st.markdown(f"**📌 {eq_type}**")
+        subset_queue = [p for p in st.session_state.waiting_queue if p["target_equip"] == eq_type]
+        
+        if subset_queue:
+            now = time.time()
+            display_data = []
+            for p in subset_queue:
+                wait_seconds = int(now - p["arrival_time"])
+                display_data.append({
+                    "編號": p["id"],
+                    "姓名": p["name"],
+                    "等待": f"{wait_seconds}秒",
+                    "HRRN": round(p.get("hrrn_score", 0), 2)
+                })
+            df_display = pd.DataFrame(display_data)
+            st.table(df_display)
+        else:
+            st.info("目前無人排隊")
 
 # 【下方區塊】復健器材運作狀態區
 st.write("---")
