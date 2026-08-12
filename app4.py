@@ -351,10 +351,10 @@ if need_trigger_rerun:
     st.rerun()
 
 # ==========================================
-# 7. 前端呈現：5 大獨立排程表格式呈現
+# 7. 前端呈現：5 大獨立排程表格式呈現 (HRRN 浮點數分數)
 # ==========================================
 st.write("---")
-st.subheader("🔴 5 大器材獨立排程清單 (HRRN 優先權與即時排名)")
+st.subheader("🔴 5 大器材獨立排程清單 (HRRN 動態優先權與名次)")
 
 queue_cols = st.columns(len(EQUIPMENT_LIST))
 for idx, eq_name in enumerate(EQUIPMENT_LIST):
@@ -370,14 +370,14 @@ for idx, eq_name in enumerate(EQUIPMENT_LIST):
                     "編號": p["id"],
                     "姓名": p["name"],
                     "等待": f"{wait_seconds}秒",
-                    "優先權": round(p.get("hrrn_score", 0), 2)
+                    "優先權": p.get("hrrn_score", 0.0) # 保留完整浮點數滾動
                 })
             st.dataframe(pd.DataFrame(display_data), hide_index=True, use_container_width=True)
         else:
             st.info("排程目前無人等待")
 
 # ==========================================
-# 8. 前端呈現：實體器材運作狀態區
+# 8. 前端呈現：實體器材運作狀態區 (恢復原網格與按鈕樣式)
 # ==========================================
 st.write("---")
 st.subheader("🟢 實體復健器材運作狀態區 (大轉輪1 | 坐推3 | 漫步機2 | 肩關節1 | 助行車3)")
@@ -387,15 +387,12 @@ for eq_base in EQUIPMENT_LIST:
     st.markdown(f"#### ⚙️ {eq_base} 設備群組 (共 {count} 台)")
     eq_cols = st.columns(max(count, 1))
     
-    if count == 1:
-        eq_cols = [eq_cols] # 確保單台時為串列迭代
-        
     for i in range(1, count + 1):
         machine_key = f"{eq_base}_{i}"
         p = st.session_state.equipment_status[machine_key]
         
-        col_target = eq_cols[i-1] if isinstance(eq_cols, list) else eq_cols
-        with col_target:
+        target_col = eq_cols[i-1] if count > 1 else eq_cols[0]
+        with target_col:
             if p:
                 current_now = time.time()
                 is_currently_paused = p.get("is_paused", False)
