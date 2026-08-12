@@ -361,43 +361,36 @@ if need_trigger_rerun:
     st.rerun()
 
 # ==========================================
-# 7. 前端上下排版呈現
+# 7. 前端上下排版呈現（表格排隊區 + 下方狀態區）
 # ==========================================
 
-# 【上方區塊】現場排隊等待區 (五項器材分開並排)
+# 【上方區塊】現場排隊等待區 (使用原本的表格呈現)
 st.write("---")
-st.subheader("🔴 現場排隊等待區（依器材分類）")
-
-equip_types = ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]
-queue_cols = st.columns(len(equip_types))
-
-for idx, eq_type in enumerate(equip_types):
-    with queue_cols[idx]:
-        st.markdown(f"**📌 {eq_type}**")
-        subset_queue = [p for p in st.session_state.waiting_queue if p["target_equip"] == eq_type]
-        
-        if subset_queue:
-            for p in subset_queue:
-                now_t = time.time()
-                wait_seconds = int(now_t - p["arrival_time"])
-                score = round(p.get("hrrn_score", 0), 2)
-                st.markdown(f"""
-                <div style="background: white; padding: 8px; border-radius: 6px; margin-bottom: 8px; border: 1px solid #e2e8f0; font-size: 0.85em;">
-                    👤 <b>{p['name']}</b> ({p['age']}歲)<br>
-                    🆔 碼: {p['id']}<br>
-                    ⏱️ 等待: {wait_seconds}秒<br>
-                    📊 HRRN: {score}
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("目前無人排隊")
+st.subheader("🔴 現場排隊等待區")
+if st.session_state.waiting_queue:
+    now = time.time()
+    display_data = []
+    for p in st.session_state.waiting_queue:
+        wait_seconds = int(now - p["arrival_time"])
+        display_data.append({
+            "長輩編號": p["id"],
+            "姓名": p["name"],
+            "年齡": f"{p['age']}歲",
+            "目標器材": p["target_equip"],
+            "等待時間": f"{wait_seconds}秒",
+            "優先權分數(HRRN)": round(p.get("hrrn_score", 0), 4)
+        })
+    
+    df_display = pd.DataFrame(display_data)
+    st.table(df_display) 
+else:
+    st.info("目前無人排隊")
 
 # 【下方區塊】復健器材運作狀態區
 st.write("---")
 st.subheader("🟢 復健器材運作狀態區")
 
 status_items = list(st.session_state.equipment_status.items())
-# 每行顯示 3 個狀態卡片
 for i in range(0, len(status_items), 3):
     row_cols = st.columns(3)
     for j in range(3):
