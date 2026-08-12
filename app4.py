@@ -8,7 +8,7 @@ from datetime import datetime
 # ==========================================
 # 1. 網頁基本設定與美化 CSS
 # ==========================================
-st.set_page_config(page_title="智慧復健獨立多佇列排程系統", layout="wide")
+st.set_page_config(page_title="智慧復健獨立多排程系統", layout="wide")
 
 st.markdown("""
     <style>
@@ -28,7 +28,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🏥 智慧復健獨立多佇列排程系統 (固定 5 大器材排程)")
+st.title("🏥 智慧復健獨立多排程系統 (自定義各器材數量)")
 
 # ==========================================
 # 2. 原始復健運動處方大表
@@ -109,9 +109,16 @@ df_prescription = pd.DataFrame(matrix_rows)
 st.table(df_prescription)
 
 # ==========================================
-# 3. 系統狀態初始化 (固定 5 個器材排程，各 5 台實體設備)
+# 3. 系統狀態初始化 (自定義器材數量配置)
 # ==========================================
-EQUIPMENT_LIST = ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]
+EQUIPMENT_COUNTS = {
+    "大轉輪": 1,
+    "坐推": 3,
+    "漫步機": 2,
+    "肩關節康復器": 1,
+    "復健助行車": 3
+}
+EQUIPMENT_LIST = list(EQUIPMENT_COUNTS.keys())
 
 if "waiting_queues" not in st.session_state: 
     st.session_state.waiting_queues = {eq: [] for eq in EQUIPMENT_LIST}  
@@ -120,8 +127,8 @@ if "total_mock_count" not in st.session_state: st.session_state.total_mock_count
 
 if "equipment_status" not in st.session_state: 
     st.session_state.equipment_status = {}
-    for eq in EQUIPMENT_LIST:
-        for i in range(1, 6): # 每種器材 5 台實體機
+    for eq, count in EQUIPMENT_COUNTS.items():
+        for i in range(1, count + 1):
             st.session_state.equipment_status[f"{eq}_{i}"] = None
 
 if "start_system_timestamp" not in st.session_state: st.session_state.start_system_timestamp = time.time()  
@@ -179,11 +186,10 @@ with st.sidebar:
                 ln = random.choice(last_names)
                 tit = random.choice(["爺爺", "奶奶"])
                 age = random.choice([60, 70, 80, 90])
-                eq = random.choice(EQUIPMENT_LIST) # 隨機選一個想去的排程
+                eq = random.choice(EQUIPMENT_LIST)
                 
                 p_id = get_or_create_patient_id(ln, tit, age)
                 
-                # 檢查是否已經在該排隊或使用中
                 already_in_q = any(p["id"] == p_id for p in st.session_state.waiting_queues[eq])
                 using_this = any(p and p["id"] == p_id for k, p in st.session_state.equipment_status.items() if k.startswith(eq))
                 
@@ -228,7 +234,7 @@ now_time = time.time()
 st.session_state.cooldown_patients = {k: v for k, v in st.session_state.cooldown_patients.items() if now_time < v}
 m3.metric("換場休息中(3分/人)", f"{len(st.session_state.cooldown_patients)} 人")
 
-with st.expander("➕ 長輩報到與單一排程選擇", expanded=True):
+with st.expander("➕ 長輩報到與選擇單一器材排程", expanded=True):
     with st.form(key="patient_input_form"):
         col1, col2, col3 = st.columns([1,1,1])
         with col1:
@@ -238,8 +244,8 @@ with st.expander("➕ 長輩報到與單一排程選擇", expanded=True):
         with col3:
             input_age = st.selectbox("年齡層", [60, 70, 80, 90], format_func=lambda x:f"{x}歲", key=f"age_widget_{st.session_state.form_version}")
         
-        input_equip = st.selectbox("選擇您想去排隊的單一器材排程", EQUIPMENT_LIST, key=f"eq_widget_{st.session_state.form_version}")
-        submit_button = st.form_submit_button(label="加入該器材排隊")
+        input_equip = st.selectbox("選擇您想加入哪一項器材排程", EQUIPMENT_LIST, key=f"eq_widget_{st.session_state.form_version}")
+        submit_button = st.form_submit_button(label="加入排程")
         
         if submit_button:
             st.session_state.input_last_name = input_ln.strip()
@@ -253,7 +259,6 @@ with st.expander("➕ 長輩報到與單一排程選擇", expanded=True):
             else:
                 p_id = get_or_create_patient_id(input_ln.strip(), input_tit, input_age)
                 
-                # 檢查是否已經在該排程或正在使用中
                 in_waiting = any(p["id"] == p_id for p in st.session_state.waiting_queues[input_equip])
                 using_this = any(p and p["id"] == p_id for k, p in st.session_state.equipment_status.items() if k.startswith(input_equip))
                 past_done = input_equip in st.session_state.patient_history.get(p_id, set())
@@ -262,7 +267,7 @@ with st.expander("➕ 長輩報到與單一排程選擇", expanded=True):
                     st.session_state.form_status = {"type": "warning", "msg": f"❌ 登記失敗！您目前正在使用「{input_equip}」。"}
                     st.rerun()
                 elif in_waiting:
-                    st.session_state.form_status = {"type": "warning", "msg": f"❌ 登記失敗！您已經在「{input_equip}」的排隊序列中了。"}
+                    st.session_state.form_status = {"type": "warning", "msg": f"❌ 登記失敗！您已經在「{input_equip}」的排程序列中了。"}
                     st.rerun()
                 elif past_done:
                     st.session_state.form_status = {"type": "warning", "msg": f"❌ 登記失敗！您已經完成過「{input_equip}」的復健。"}
@@ -308,7 +313,7 @@ for eq, p in list(st.session_state.equipment_status.items()):
             st.session_state.equipment_status[eq] = None
             need_trigger_rerun = True
 
-# 2. 針對五個獨立器材排程進行 HRRN 排序與派位
+# 2. 針對五個獨立排程進行 HRRN 排序與派位
 for target_eq in EQUIPMENT_LIST:
     queue = st.session_state.waiting_queues[target_eq]
     if queue:
@@ -323,10 +328,8 @@ for target_eq in EQUIPMENT_LIST:
             wait_m = wait_seconds / 60
             p["hrrn_score"] = (max(wait_m, 0.001) + p["service_time"]) / p["service_time"]
         
-        # 依 HRRN 分數高到低排序
         queue.sort(key=lambda x: x["hrrn_score"], reverse=True)
         
-        # 將排在最前面的長輩指派到該器材空閒的實體機台上
         rem_queue = []
         for p in queue:
             is_cd = p["id"] in st.session_state.cooldown_patients
@@ -348,10 +351,10 @@ if need_trigger_rerun:
     st.rerun()
 
 # ==========================================
-# 7. 前端呈現：五個獨立排程佇列 (展示 HRRN 優先權與名次)
+# 7. 前端呈現：5 大獨立排程表格式呈現
 # ==========================================
 st.write("---")
-st.subheader("🔴 5 大器材獨立排程佇列 (HRRN 動態優先權與名次)")
+st.subheader("🔴 5 大器材獨立排程清單 (HRRN 優先權與即時排名)")
 
 queue_cols = st.columns(len(EQUIPMENT_LIST))
 for idx, eq_name in enumerate(EQUIPMENT_LIST):
@@ -373,18 +376,26 @@ for idx, eq_name in enumerate(EQUIPMENT_LIST):
         else:
             st.info("排程目前無人等待")
 
+# ==========================================
+# 8. 前端呈現：實體器材運作狀態區
+# ==========================================
 st.write("---")
-st.subheader("🟢 25台復健器材實體運作狀態區")
+st.subheader("🟢 實體復健器材運作狀態區 (大轉輪1 | 坐推3 | 漫步機2 | 肩關節1 | 助行車3)")
 
 for eq_base in EQUIPMENT_LIST:
-    st.markdown(f"#### ⚙️ {eq_base} 設備群組 (共 5 台)")
-    eq_cols = st.columns(5)
+    count = EQUIPMENT_COUNTS[eq_base]
+    st.markdown(f"#### ⚙️ {eq_base} 設備群組 (共 {count} 台)")
+    eq_cols = st.columns(max(count, 1))
     
-    for i in range(1, 6):
+    if count == 1:
+        eq_cols = [eq_cols] # 確保單台時為串列迭代
+        
+    for i in range(1, count + 1):
         machine_key = f"{eq_base}_{i}"
         p = st.session_state.equipment_status[machine_key]
         
-        with eq_cols[i-1]:
+        col_target = eq_cols[i-1] if isinstance(eq_cols, list) else eq_cols
+        with col_target:
             if p:
                 current_now = time.time()
                 is_currently_paused = p.get("is_paused", False)
