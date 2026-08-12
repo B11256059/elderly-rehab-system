@@ -6,7 +6,7 @@ import random
 from datetime import datetime
 
 # ==========================================
-# 1. 網頁基本設定與美化 CSS
+# 1. 網頁基本設定與美化 CSS (固定卡片尺寸以保持整齊)
 # ==========================================
 st.set_page_config(page_title="智慧復健獨立多排程系統", layout="wide")
 
@@ -15,13 +15,28 @@ st.markdown("""
     .main { background-color: #f8fafc; }
     .stButton>button { width: 100%; border-radius: 8px; height: 3em; font-weight: bold; }
     .status-card {
-        background-color: white; border-radius: 12px; padding: 15px;
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-left: 5px solid #10b981;
+        background-color: white; 
+        border-radius: 12px; 
+        padding: 15px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); 
+        border-left: 5px solid #10b981;
         margin-bottom: 12px;
+        height: 140px; /* 固定卡片高度，避免內容不同造成大小不一 */
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
     .status-card.paused {
         border-left: 5px solid #eab308;
         background-color: #fefce8;
+    }
+    .status-card.empty {
+        border-left: 5px solid #cbd5e1; 
+        color: #94a3b8; 
+        height: 140px; /* 同步固定高度 */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     }
     .highlight-text { color: #0e7490; font-weight: bold; }
     .warning-text { color: #b45309; font-weight: bold; }
@@ -351,7 +366,7 @@ if need_trigger_rerun:
     st.rerun()
 
 # ==========================================
-# 7. 前端呈現：5 大獨立排程表格式呈現 (HRRN 浮點數分數)
+# 7. 前端呈現：5 大獨立排程表格式呈現 (浮點數分數)
 # ==========================================
 st.write("---")
 st.subheader("🔴 5 大器材獨立排程清單 (HRRN 動態優先權與名次)")
@@ -370,14 +385,14 @@ for idx, eq_name in enumerate(EQUIPMENT_LIST):
                     "編號": p["id"],
                     "姓名": p["name"],
                     "等待": f"{wait_seconds}秒",
-                    "優先權": p.get("hrrn_score", 0.0) # 保留完整浮點數滾動
+                    "優先權": p.get("hrrn_score", 0.0) # 浮點數呈現
                 })
             st.dataframe(pd.DataFrame(display_data), hide_index=True, use_container_width=True)
         else:
             st.info("排程目前無人等待")
 
 # ==========================================
-# 8. 前端呈現：實體器材運作狀態區 (恢復原網格與按鈕樣式)
+# 8. 前端呈現：實體器材運作狀態區 (固定大小卡片)
 # ==========================================
 st.write("---")
 st.subheader("🟢 實體復健器材運作狀態區 (大轉輪1 | 坐推3 | 漫步機2 | 肩關節1 | 助行車3)")
@@ -415,9 +430,11 @@ for eq_base in EQUIPMENT_LIST:
                     
                     st.markdown(f"""
                     <div class="status-card" style="background-color: {bg_color}; border-left: 5px solid {border_color};">
-                        <b>{machine_key}</b><br>
-                        👤 <span class="highlight-text">{p['name']}({p['id']})</span><br>
-                        <span style="font-size:0.85em; color:{'#b91c1c' if wait_time > 60 else '#1d4ed8'};">{status_text}</span>
+                        <div>
+                            <b>{machine_key}</b><br>
+                            👤 <span class="highlight-text">{p['name']}({p['id']})</span>
+                        </div>
+                        <div style="font-size:0.85em; color:{'#b91c1c' if wait_time > 60 else '#1d4ed8'};">{status_text}</div>
                     </div>
                     """, unsafe_allow_html=True)
                     
@@ -431,18 +448,22 @@ for eq_base in EQUIPMENT_LIST:
                         remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
                         st.markdown(f"""
                         <div class="status-card paused">
-                            <b>{machine_key}</b><br>
-                            👤 <span class="highlight-text">{p['name']}({p['id']})</span><br>
-                            <span style="font-size:0.85em;" class="warning-text">休息倒數: {remaining_pause}秒</span>
+                            <div>
+                                <b>{machine_key}</b><br>
+                                👤 <span class="highlight-text">{p['name']}({p['id']})</span>
+                            </div>
+                            <div style="font-size:0.85em;" class="warning-text">休息倒數: {remaining_pause}秒</div>
                         </div>
                         """, unsafe_allow_html=True)
                     else:
                         elapsed = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
                         st.markdown(f"""
                         <div class="status-card">
-                            <b>{machine_key}</b><br>
-                            👤 <span class="highlight-text">{p['name']}({p['id']})</span><br>
-                            <span style="font-size:0.85em;">已執行: {elapsed//60}分{elapsed%60}秒 / 目標: {p['service_time']}分</span>
+                            <div>
+                                <b>{machine_key}</b><br>
+                                👤 <span class="highlight-text">{p['name']}({p['id']})</span>
+                            </div>
+                            <div style="font-size:0.85em;">已執行: {elapsed//60}分{elapsed%60}秒 / 目標: {p['service_time']}分</div>
                         </div>
                         """, unsafe_allow_html=True)
                     
@@ -470,7 +491,7 @@ for eq_base in EQUIPMENT_LIST:
                             st.session_state.equipment_status[machine_key] = None
                             st.rerun()
             else:
-                st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8; padding: 15px;"><b>{machine_key}</b><br><span style="font-size:0.85em;">🟢 空閒中</span></div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class="status-card empty"><b>{machine_key}</b><br><span style="font-size:0.85em;">🟢 空閒中</span></div>""", unsafe_allow_html=True)
 
 # 動態重新整理迴圈
 has_active = total_waiting_count > 0 or any(p is not None for p in st.session_state.equipment_status.values()) or len(st.session_state.cooldown_patients) > 0
