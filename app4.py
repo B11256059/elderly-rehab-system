@@ -372,7 +372,7 @@ queue_cols = st.columns(5)
 
 for idx, eq_type in enumerate(equip_types):
     with queue_cols[idx]:
-        st.markdown(f"** {eq_type}**")
+        st.markdown(f"{eq_type}")
         subset_queue = [p for p in st.session_state.waiting_queue if p["target_equip"] == eq_type]
         
         if subset_queue:
