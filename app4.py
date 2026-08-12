@@ -365,7 +365,7 @@ if need_trigger_rerun:
 
 # 【上方區塊】五大器材獨立的欄位與表格等待區
 st.write("---")
-st.subheader("🔴 現場排隊等待區（五大器材獨立表格）")
+st.subheader("🔴 現場排隊等待區")
 
 equip_types = ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]
 queue_cols = st.columns(5)
@@ -394,7 +394,7 @@ for idx, eq_type in enumerate(equip_types):
 
 # 【下方區塊】復健器材運作狀態區（改為一個器材一排，每排顯示其對應的機台狀態）
 st.write("---")
-st.subheader("🟢 復健器材運作狀態區（依器材分類分排顯示）")
+st.subheader("🟢 復健器材運作狀態區")
 
 # 將所有機台依器材名稱分類群組
 equip_groups = {
