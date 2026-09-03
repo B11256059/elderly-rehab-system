@@ -161,7 +161,7 @@ def add_patient(p_id, last_name, title, age, selected_equips, group_id=None):
             "prescription_detail": pres_info,
             "is_paused": False,      
             "pause_start_time": 0,      
-            "paused_duration": 0,        
+            "total_paused_duration": 0,  
             "group_id": group_id       
         })
 
@@ -321,43 +321,34 @@ now = time.time()
 need_trigger_rerun = False 
 
 for eq, p in list(st.session_state.equipment_status.items()):
-    if p and p.get("is_started", False):
+    if p:
         if p.get("is_paused", False):
             if now - p["pause_start_time"] >= MID_PAUSE_SECONDS:
-                p["paused_duration"] += MID_PAUSE_SECONDS
+                p["total_paused_duration"] += MID_PAUSE_SECONDS
                 p["is_paused"] = False
                 p["pause_start_time"] = 0
             else:
                 continue
 
+        net_active_seconds = now - p["start_time"] - p.get("total_paused_duration", 0)
+        
         pres = p["prescription_detail"]
         sets = pres["sets"]
         set_time = pres["set_time"]
         rest_time = pres["rest_time"]
         
-        phase_elapsed = now - p["phase_start_time"] - p.get("paused_duration", 0)
-        
-        if p["phase"] == "training":
-            if phase_elapsed >= set_time:
-                if p["current_set"] >= sets:
-                    if p["id"] not in st.session_state.patient_history:
-                        st.session_state.patient_history[p["id"]] = set()
-                    st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
-                    st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
-                    st.session_state.equipment_status[eq] = None
-                    need_trigger_rerun = True
-                else:
-                    p["phase"] = "resting"
-                    p["phase_start_time"] = now
-                    p["paused_duration"] = 0
-                    need_trigger_rerun = True
-        elif p["phase"] == "resting":
-            if phase_elapsed >= rest_time:
-                p["current_set"] += 1
-                p["phase"] = "training"
-                p["phase_start_time"] = now
-                p["paused_duration"] = 0
-                need_trigger_rerun = True
+        if sets <= 1:
+            total_required_seconds = set_time
+        else:
+            total_required_seconds = (set_time * sets) + (rest_time * (sets - 1))
+            
+        if net_active_seconds >= total_required_seconds:
+            if p["id"] not in st.session_state.patient_history:
+                st.session_state.patient_history[p["id"]] = set()
+            st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
+            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
+            st.session_state.equipment_status[eq] = None
+            need_trigger_rerun = True
 
 if st.session_state.waiting_queue:
     busy_ids = {p["id"] for p in st.session_state.equipment_status.values() if p}
@@ -397,7 +388,7 @@ if st.session_state.waiting_queue:
                         comp_avail_eqs = [eq for eq, status in st.session_state.equipment_status.items() if status is None and eq.startswith(target_base)]
                         if comp_avail_eqs:
                             eq_to_assign = comp_avail_eqs[0]
-                            comp["assigned_time"] = now
+                            comp["start_time"] = now
                             st.session_state.equipment_status[eq_to_assign] = comp
                             busy_ids.add(comp["id"])
                     assigned = True
@@ -405,7 +396,7 @@ if st.session_state.waiting_queue:
             
             if not assigned:
                 eq = available_eqs[0]
-                p["assigned_time"] = now
+                p["start_time"] = now
                 st.session_state.equipment_status[eq] = p
                 busy_ids.add(p["id"])
                 need_trigger_rerun = True
@@ -484,23 +475,31 @@ with right_col:
                     
                     if st.button(f"▶️ 開始復健", key=f"start_{eq}"):
                         p["is_started"] = True
-                        p["current_set"] = 1
-                        p["phase"] = "training"
-                        p["phase_start_time"] = time.time()
-                        p["paused_duration"] = 0
+                        p["start_time"] = time.time()
                         st.rerun()
                 
                 else:
-                    current_set = p.get("current_set", 1)
-                    phase = p.get("phase", "training")
-                    phase_elapsed = int(current_now - p["phase_start_time"] - p.get("paused_duration", 0))
-                    
+                    net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
                     pres = p["prescription_detail"]
                     sets = pres["sets"]
                     set_time = pres["set_time"]
                     rest_time = pres["rest_time"]
                     
+                    is_auto_resting = False
+                    current_set_num = 1
+                    auto_rest_left = 0
+                    
+                    if sets > 1:
+                        cycle_time = set_time + rest_time
+                        current_cycle_pos = net_active_sec % cycle_time
+                        current_set_num = min(sets, (net_active_sec // cycle_time) + 1)
+                        
+                        if current_set_num < sets and current_cycle_pos >= set_time:
+                            is_auto_resting = True
+                            auto_rest_left = max(0, rest_time - (current_cycle_pos - set_time))
+                    
                     if is_currently_paused:
+                        elapsed = int(p["pause_start_time"] - p["start_time"] - p.get("total_paused_duration", 0))
                         remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
                         st.markdown(f"""
                         <div class="status-card paused">
@@ -509,64 +508,56 @@ with right_col:
                             ⏱️ 手動中斷休息中 <span class="warning-text">(倒數: {remaining_pause}秒)</span>
                         </div>
                         """, unsafe_allow_html=True)
-                    elif phase == "resting":
-                        rest_left = max(0, rest_time - phase_elapsed)
+                    elif is_auto_resting:
                         st.markdown(f"""
                         <div class="status-card auto-resting">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            🔄 <span style="color:#2563eb; font-weight:bold;">組間自動休息中</span> (第 {current_set}/{sets} 組完成)<br>
-                            ⏳ 休息倒數: <span class="warning-text">{rest_left} 秒</span> / 預計總處方: {p['service_time']}分鐘
+                            🔄 <span style="color:#2563eb; font-weight:bold;">組間自動休息中</span> (第 {current_set_num}/{sets} 組完成)<br>
+                            ⏳ 休息倒數: <span class="warning-text">{auto_rest_left} 秒</span> / 預計總處方: {p['service_time']}分鐘
                         </div>
                         """, unsafe_allow_html=True)
                     else:
-                        set_left = max(0, set_time - phase_elapsed)
                         st.markdown(f"""
                         <div class="status-card">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            🏋️ 正在執行: 第 {current_set}/{sets} 組訓練 (本組剩餘: {set_left}秒)<br>
-                            ⏱️ 累積執行: {phase_elapsed}秒 / 處方預計: {p['service_time']}分鐘
+                            🏋️ 正在執行: 第 {min(current_set_num, sets)}/{sets} 組訓練<br>
+                            ⏱️ 淨執行時間: {net_active_sec//60}分{net_active_sec%60}秒 / 處方預計: {p['service_time']}分鐘
                         </div>
                         """, unsafe_allow_html=True)
                     
                     c1, c2 = st.columns(2)
                     
+                    # 依據目前狀態動態調整按鈕佈局（組間自動休息時不顯示手動中斷按鈕）
                     if is_currently_paused:
                         c1.button(f"⏳ 休息中...", key=f"s_{eq}", disabled=True)
                         if c2.button(f"▶️ 跳過休息", key=f"f_{eq}__skip"):
-                            p["paused_duration"] += (time.time() - p["pause_start_time"])
+                            p["total_paused_duration"] += (time.time() - p["pause_start_time"])
                             p["is_paused"] = False
                             p["pause_start_time"] = 0
                             st.rerun()
-                    elif phase == "resting":
+                    elif is_auto_resting:
                         c1.button(f"🔄 組間休息中", key=f"s_{eq}_auto", disabled=True)
-                        if c2.button(f"⚡ 跳過休息", key=f"f_{eq}__skip_rest"):
-                            p["current_set"] += 1
-                            p["phase"] = "training"
-                            p["phase_start_time"] = time.time()
-                            p["paused_duration"] = 0
+                        if c2.button(f"🐇 已完成目標", key=f"f_{eq}__done"):
+                            if p["id"] not in st.session_state.patient_history:
+                                st.session_state.patient_history[p["id"]] = set()
+                            st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
+                            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
+                            st.session_state.equipment_status[eq] = None
                             st.rerun()
                     else:
                         if c1.button(f"⏸️ 手動中斷 (1分)", key=f"s_{eq}__btn"):
                             p["is_paused"] = True
                             p["pause_start_time"] = time.time()
                             st.rerun()
-                            
-                        btn_label = f"⚡ 第 {current_set} 組提前結束" if sets > 1 else f"🐇 已完成目標"
-                        if c2.button(btn_label, key=f"f_{eq}__done"):
-                            if sets > 1 and current_set < sets:
-                                p["phase"] = "resting"
-                                p["phase_start_time"] = time.time()
-                                p["paused_duration"] = 0
-                                st.rerun()
-                            else:
-                                if p["id"] not in st.session_state.patient_history:
-                                    st.session_state.patient_history[p["id"]] = set()
-                                st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
-                                st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
-                                st.session_state.equipment_status[eq] = None
-                                st.rerun()
+                        if c2.button(f"🐇 已完成目標", key=f"f_{eq}__done"):
+                            if p["id"] not in st.session_state.patient_history:
+                                st.session_state.patient_history[p["id"]] = set()
+                            st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
+                            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
+                            st.session_state.equipment_status[eq] = None
+                            st.rerun()
             else:
                 st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8; padding: 25px;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
 
