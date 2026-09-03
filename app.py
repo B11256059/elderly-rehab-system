@@ -20,7 +20,7 @@ st.markdown("""
         margin-bottom: 20px;
     }
     .status-card.paused {
-        border-left: 5px solid #eab308; /* 暫停時變成黃色 */
+        border-left: 5px solid #eab308; 
         background-color: #fefce8;
     }
     .waiting-row { font-size: 0.9em; padding: 10px; border-bottom: 1px solid #e2e8f0; }
@@ -37,31 +37,26 @@ st.title("🏥 智慧復健動態排程管理系統")
 st.subheader("📋 復健運動處方大表")
 
 raw_data = [
-    # 器材一: 大轉輪
     {"器材": "大轉輪", "年齡": 60, "組數": 5, "次數": 20, "組時間": "50 (AI推估)", "休息時間": "60 (參考ACSM)"},
     {"器材": "大轉輪", "年齡": 70, "組數": 4, "次數": 16, "組時間": "40 (AI推估)", "休息時間": "70 (參考ACSM)"},
     {"器材": "大轉輪", "年齡": 80, "組數": 3, "次數": 13, "組時間": "35 (AI推估)", "休息時間": "80 (參考ACSM)"},
     {"器材": "大轉輪", "年齡": 90, "組數": 3, "次數": 10, "組時間": "30 (AI推估)", "休息時間": "90 (參考ACSM)"},
     
-    # 器材二: 坐推
     {"器材": "坐推", "年齡": 60, "組數": 5, "次數": 12, "組時間": "36 (AI推估)", "休息時間": "60 (參考ACSM)"},
     {"器材": "坐推", "年齡": 70, "組數": 5, "次數": 11, "組時間": "33 (AI推估)", "休息時間": "70 (參考ACSM)"},
     {"器材": "坐推", "年齡": 80, "組數": 4, "次數": 10, "組時間": "30 (AI推估)", "休息時間": "80 (參考ACSM)"},
     {"器材": "坐推", "年齡": 90, "組數": 3, "次數": 10, "組時間": "30 (AI推估)", "休息時間": "90 (參考ACSM)"},
     
-    # 器材三: 漫步機
     {"器材": "漫步機", "年齡": 60, "組數": 2, "次數": "不適用", "組時間": 450, "休息時間": "60 (參考ACSM)"},
     {"器材": "漫步機", "年齡": 70, "組數": 2, "次數": "不適用", "組時間": 390, "休息時間": "70 (參考ACSM)"},
     {"器材": "漫步機", "年齡": 80, "組數": 2, "次數": "不適用", "組時間": 330, "休息時間": "80 (參考ACSM)"},
     {"器材": "漫步機", "年齡": 90, "組數": 2, "次數": "不適用", "組時間": 300, "休息時間": "90 (參考ACSM)"},
 
-    # 器材四: 肩關節康復器
     {"器材": "肩關節康復器", "年齡": 60, "組數": 5, "次數": 20, "組時間": "45 (AI推估)", "休息時間": "60 (參考ACSM)"},
     {"器材": "肩關節康復器", "年齡": 70, "組數": 4, "次數": 16, "組時間": "38 (AI推估)", "休息時間": "70 (參考ACSM)"},
     {"器材": "肩關節康復器", "年齡": 80, "組數": 3, "次數": 13, "組時間": "32 (AI推估)", "休息時間": "80 (參考ACSM)"},
     {"器材": "肩關節康復器", "年齡": 90, "組數": 3, "次數": 10, "組時間": "28 (AI推估)", "休息時間": "90 (參考ACSM)"},
 
-    # 器材五: 復健助行車
     {"器材": "復健助行車", "年齡": 60, "組數": 2, "次數": "不適用", "組時間": 300, "休息時間": "60 (參考ACSM)"},
     {"器材": "復健助行車", "年齡": 70, "組數": 4, "次數": "不適用", "組時間": 300, "休息時間": "70 (參考ACSM)"},
     {"器材": "復健助行車", "年齡": 80, "組數": 6, "次數": "不適用", "組時間": 300, "休息時間": "80 (參考ACSM)"},
@@ -134,13 +129,13 @@ if "patient_registry" not in st.session_state: st.session_state.patient_registry
 if "patient_history" not in st.session_state: st.session_state.patient_history = {}
 
 if "input_last_name" not in st.session_state: st.session_state.input_last_name = ""
-if "input_group_id" not in st.session_state: st.session_state.input_group_id = "" # 新增：表單欄位狀態保持
+if "input_companion_id" not in st.session_state: st.session_state.input_companion_id = "" # 改為輸入同行者的編號
 if "input_equips" not in st.session_state: st.session_state.input_equips = []
 if "form_version" not in st.session_state: st.session_state.form_version = 0
 if "form_status" not in st.session_state: st.session_state.form_status = {"type": None, "msg": None}
 
-TRANSIT_COOLDOWN_SECONDS = 180 # 3分鐘換場休息
-MID_PAUSE_SECONDS = 60         # 中斷休息時間：1分鐘 (60秒)
+TRANSIT_COOLDOWN_SECONDS = 180 
+MID_PAUSE_SECONDS = 60         
 
 # ==========================================
 # 4. 功能函數
@@ -165,11 +160,11 @@ def add_patient(p_id, last_name, title, age, selected_equips, group_id=None):
             "is_paused": False,      
             "pause_start_time": 0,      
             "total_paused_duration": 0,  
-            "group_id": group_id       # 接收手動輸入或模擬的同行群組 ID
+            "group_id": group_id       
         })
 
 # ==========================================
-# 5. 側邊欄模擬與控制 (已拿掉隨機同行，純粹分批注入單人)
+# 5. 側邊欄模擬與控制
 # ==========================================
 with st.sidebar:
     st.header("👥 模擬情境")
@@ -190,7 +185,7 @@ with st.sidebar:
                 eqs = random.sample(equips_base, random.randint(1, 3))
                 
                 p_id = get_or_create_patient_id(ln, tit, age)
-                add_patient(p_id, ln, tit, age, eqs, group_id=None) # 模擬預設為無同行組別
+                add_patient(p_id, ln, tit, age, eqs, group_id=None)
                 st.session_state.total_mock_count += 1
             
             st.rerun()
@@ -208,7 +203,7 @@ with st.sidebar:
         st.session_state.start_system_timestamp = time.time()
         st.session_state.form_status = {"type": None, "msg": None}
         st.session_state.input_last_name = ""
-        st.session_state.input_group_id = ""
+        st.session_state.input_companion_id = ""
         st.session_state.input_equips = []
         st.session_state.form_version += 1
         st.rerun()
@@ -230,6 +225,10 @@ st.session_state.cooldown_patients = {k: v for k, v in st.session_state.cooldown
 m3.metric("換場休息中(3分/人)", f"{len(st.session_state.cooldown_patients)} 人")
 
 with st.expander("➕ 長輩報到與處方登記", expanded=True):
+    # 提示目前系統下一個即將產生的編號大約是多少，或告訴護理人員可以參考左側表格
+    next_preview_id = f"#{st.session_state.patient_id_counter:03d}"
+    st.info(f"💡 提示：下一位獨立報到的長輩系統編號預計為 **{next_preview_id}**。若與前一位同行，請直接在下方輸入同行者的編號（例如 `#001`）。")
+
     with st.form(key="patient_input_form"):
         col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
         with col1:
@@ -239,15 +238,15 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
         with col3:
             input_age = st.selectbox("年齡層", [60, 70, 80, 90], format_func=lambda x:f"{x}歲", key=f"age_widget_{st.session_state.form_version}")
         with col4:
-            # 手動輸入同行代碼欄位 (選填)
-            input_gid = st.text_input("同行組別 (選填)", value=st.session_state.input_group_id, placeholder="例如：朋友A", key=f"gid_widget_{st.session_state.form_version}")
+            # 改為輸入同行者編號
+            input_comp_id = st.text_input("同行者編號 (選填)", value=st.session_state.input_companion_id, placeholder="例如：#001", key=f"comp_widget_{st.session_state.form_version}")
         
         input_equips = st.multiselect("復健處方器材 (可多選)", ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"], default=st.session_state.input_equips, key=f"eqs_widget_{st.session_state.form_version}")
         submit_button = st.form_submit_button(label="進入排隊等待")
         
         if submit_button:
             st.session_state.input_last_name = input_ln.strip()
-            st.session_state.input_group_id = input_gid.strip()
+            st.session_state.input_companion_id = input_comp_id.strip()
             st.session_state.input_equips = input_equips
             
             missing_fields = []
@@ -261,7 +260,37 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
                 }
                 st.rerun()
             else:
+                # 1. 產生當前長輩自己的編號
                 p_id = get_or_create_patient_id(input_ln.strip(), input_tit, input_age)
+                
+                # 2. 處理同行邏輯：若有輸入同行者編號，需確保該編號存在於系統中
+                target_comp_id = input_comp_id.strip()
+                final_group_id = None
+                
+                if target_comp_id:
+                    # 確保格式正確，若使用者忘記加 # 可以自動補上
+                    if not target_comp_id.startswith("#"):
+                        target_comp_id = f"#{target_comp_id}"
+                    
+                    # 檢查該同行編號是否存在於現有的 registry 或 queue 中
+                    existing_ids = list(st.session_state.patient_registry.values())
+                    if target_comp_id in existing_ids:
+                        # 找到同行的群組代碼：我們直接以「最早同行的那個人的 ID」或是互相關聯做為群組依據
+                        # 為了簡化，只要兩者互填或填了同一個人，我們就可以把這群組歸給該同行編號，或者建立一個共享群組代碼
+                        # 這裡最聰明的作法是：去查該同行者原本有沒有 group_id，如果有就用他的；如果沒有，就以該同行者的 ID 作為 group_id
+                        found_group = target_comp_id # 預設直接用同行者的 ID 當作群組識別碼
+                        for q_item in st.session_state.waiting_queue:
+                            if q_item["id"] == target_comp_id and q_item.get("group_id"):
+                                found_group = q_item["group_id"]
+                                break
+                        final_group_id = found_group
+                    else:
+                        st.session_state.form_status = {
+                            "type": "warning",
+                            "msg": f"⚠️ 登記失敗：找不到輸入的同行編號「{target_comp_id}」，請確認該長輩是否已經先完成報到！"
+                        }
+                        st.rerun()
+
                 current_waiting_equips = [p["target_equip"] for p in st.session_state.waiting_queue if p["id"] == p_id]
                 current_using_equips = [eq.split('_')[0] for eq, p in st.session_state.equipment_status.items() if p and p["id"] == p_id]
                 past_done_equips = st.session_state.patient_history.get(p_id, set())
@@ -281,7 +310,7 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
                 
                 if invalid_equips_msg:
                     st.session_state.input_last_name = ""
-                    st.session_state.input_group_id = ""
+                    st.session_state.input_companion_id = ""
                     st.session_state.input_equips = []
                     st.session_state.form_version += 1
                     st.session_state.form_status = {
@@ -290,16 +319,14 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
                     }
                     st.rerun()
                 else:
-                    # 如果有填寫同行組別，就代入該字串，沒填則為 None
-                    final_gid = input_gid.strip() if input_gid.strip() else None
-                    add_patient(p_id, input_ln.strip(), input_tit, input_age, valid_to_add, group_id=final_gid)
+                    add_patient(p_id, input_ln.strip(), input_tit, input_age, valid_to_add, group_id=final_group_id)
                     st.session_state.input_last_name = ""
-                    st.session_state.input_group_id = ""
+                    st.session_state.input_companion_id = ""
                     st.session_state.input_equips = []
                     st.session_state.form_version += 1
                     st.session_state.form_status = {
                         "type": "success",
-                        "msg": f"⭕ 登記成功，已進入排隊！"
+                        "msg": f"⭕ 登記成功！您的編號是 {p_id}" + (f"，已與同行者 {target_comp_id} 綁定！" if final_group_id else "")
                     }
                     st.rerun()
         
@@ -363,7 +390,7 @@ if st.session_state.waiting_queue:
             group_id = p.get("group_id")
             if group_id:
                 companions = [comp for comp in st.session_state.waiting_queue 
-                              if comp.get("group_id") == group_id and comp["target_equip"] == target_base and comp["id"] not in busy_ids and comp["id"] not in st.session_state.cooldown_patients]
+                              if (comp.get("group_id") == group_id or comp["id"] == group_id) and comp["target_equip"] == target_base and comp["id"] not in busy_ids and comp["id"] not in st.session_state.cooldown_patients]
                 
                 if len(available_eqs) >= len(companions):
                     for comp in companions:
@@ -408,7 +435,7 @@ with left_col:
                 "姓名": p["name"],
                 "年齡": f"{p['age']}歲",
                 "目標器材": p["target_equip"],
-                "同行組別": p.get("group_id") if p.get("group_id") else "-",
+                "同行群組/對象": p.get("group_id") if p.get("group_id") else "-",
                 "等待時間": f"{wait_seconds}秒",
                 "優先權分數(HRRN)": round(p.get("hrrn_score", 0), 4)
             })
