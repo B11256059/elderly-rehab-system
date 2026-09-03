@@ -172,7 +172,7 @@ with st.sidebar:
     st.header("👥 模擬情境")
     st.write(f"當前已模擬人數: {st.session_state.total_mock_count} / 20")
     
-    if st.button("🚀 分批注入 (自動隨機單人/多人同行)"):
+    if st.button("🚀 分批注入"):
         if st.session_state.total_mock_count < 20:
             last_names = ["王", "陳", "林", "張", "李", "吳", "劉", "蔡", "楊", "黃", "曾", "洪", "郭", "馬", "徐"]
             ages_base = [60, 70, 80, 90]
@@ -260,7 +260,7 @@ m3.metric("換場休息中(3分/人)", f"{len(st.session_state.cooldown_patients
 
 with st.expander("➕ 長輩報到與處方登記", expanded=True):
     next_preview_id = st.session_state.patient_id_counter
-    st.info(f"💡 提示：下一位獨立報到的長輩系統編號為 **#{next_preview_id}**。")
+    st.info(f"💡 提示：下一位報到的長輩系統編號為 **#{next_preview_id}**。")
 
     with st.form(key="patient_input_form"):
         col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
@@ -273,7 +273,7 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
         with col4:
             input_comp_id = st.text_input("同行者編號 (選填)", value=st.session_state.input_companion_id, placeholder="例如：1", key=f"comp_widget_{st.session_state.form_version}")
         
-        input_equips = st.multiselect("復健處方器材 (可多選 1~3 項)", ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"], default=st.session_state.input_equips, key=f"eqs_widget_{st.session_state.form_version}")
+        input_equips = st.multiselect("復健處方器材 (可多選 1~5 項)", ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"], default=st.session_state.input_equips, key=f"eqs_widget_{st.session_state.form_version}")
         submit_button = st.form_submit_button(label="進入排隊等待")
         
         if submit_button:
@@ -436,7 +436,7 @@ with left_col:
                 "姓名": p["name"],
                 "年齡": f"{p['age']}歲",
                 "目標器材": p["target_equip"],
-                "同行組別": group_str,
+                "同行編號": group_str,
                 "等待時間": f"{wait_seconds}秒",
                 "優先權分數(HRRN)": round(p.get("hrrn_score", 0), 4)
             })
@@ -505,7 +505,7 @@ with right_col:
                         <div class="status-card paused">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            ⏱️ 手動中斷休息中 <span class="warning-text">(倒數: {remaining_pause}秒)</span>
+                            ⏱️ 中斷休息中 <span class="warning-text">(倒數: {remaining_pause}秒)</span>
                         </div>
                         """, unsafe_allow_html=True)
                     elif is_auto_resting:
@@ -513,7 +513,7 @@ with right_col:
                         <div class="status-card auto-resting">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            🔄 <span style="color:#2563eb; font-weight:bold;">組間自動休息中</span> (第 {current_set_num}/{sets} 組完成)<br>
+                            🔄 <span style="color:#2563eb; font-weight:bold;">組間休息中</span> (第 {current_set_num}/{sets} 組完成)<br>
                             ⏳ 休息倒數: <span class="warning-text">{auto_rest_left} 秒</span> / 預計總處方: {p['service_time']}分鐘
                         </div>
                         """, unsafe_allow_html=True)
@@ -547,7 +547,7 @@ with right_col:
                             st.session_state.equipment_status[eq] = None
                             st.rerun()
                     else:
-                        if c1.button(f"⏸️ 手動中斷 (1分)", key=f"s_{eq}__btn"):
+                        if c1.button(f"⏸️ 中斷休息 (1分)", key=f"s_{eq}__btn"):
                             p["is_paused"] = True
                             p["pause_start_time"] = time.time()
                             st.rerun()
