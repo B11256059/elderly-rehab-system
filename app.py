@@ -427,9 +427,11 @@ with left_col:
             if p_id in st.session_state.patient_groups:
                 group_members = st.session_state.patient_groups[p_id]
                 other_members = [f"#{m:03d}" for m in group_members if m != p_id]
-                group_str = ", ".join(other_members) if other_members else "-"
+                # 若沒有其他同行成員，則顯示空字串 "" 而不是符號
+                group_str = ", ".join(other_members) if other_members else ""
             else:
-                group_str = f"#{p['group_id']:03d}" if p.get("group_id") else "-"
+                # 若沒有群組編號，則顯示空字串 ""
+                group_str = f"#{p['group_id']:03d}" if p.get("group_id") else ""
             
             display_data.append({
                 "長輩編號": id_str,
@@ -499,7 +501,6 @@ with right_col:
                             auto_rest_left = max(0, rest_time - (current_cycle_pos - set_time))
                     
                     if is_currently_paused:
-                        elapsed = int(p["pause_start_time"] - p["start_time"] - p.get("total_paused_duration", 0))
                         remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
                         st.markdown(f"""
                         <div class="status-card paused">
@@ -529,7 +530,6 @@ with right_col:
                     
                     c1, c2 = st.columns(2)
                     
-                    # 依據目前狀態動態調整按鈕佈局（組間自動休息時不顯示手動中斷按鈕）
                     if is_currently_paused:
                         c1.button(f"⏳ 休息中...", key=f"s_{eq}", disabled=True)
                         if c2.button(f"▶️ 跳過休息", key=f"f_{eq}__skip"):
