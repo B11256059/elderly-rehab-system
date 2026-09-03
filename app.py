@@ -154,16 +154,17 @@ def get_or_create_patient_id(last_name, title, age):
         p_id = st.session_state.patient_registry[reg_key]
     return p_id
 
-def add_patient(p_id, last_name, title, age, selected_equips):
+def add_patient(p_id, last_name, title, age, selected_equips, group_id=None):
     for equip in selected_equips:
         st.session_state.waiting_queue.append({
             "id": p_id, "name": f"{last_name}{title}", "age": age,
             "target_equip": equip, "arrival_time": time.time(),
             "service_time": lookup_table.get((equip, age), 5),
             "original_service_time": lookup_table.get((equip, age), 5),
-            "is_paused": False,       
+            "is_paused": False,      
             "pause_start_time": 0,      
-            "total_paused_duration": 0  
+            "total_paused_duration": 0,  
+            "group_id": group_id       # 新增：同行群組 ID 支援結伴並肩復健
         })
 
 # ==========================================
@@ -181,14 +182,24 @@ with st.sidebar:
             remaining = 20 - st.session_state.total_mock_count
             batch_size = min(random.randint(3, 5), remaining)
             
-            for _ in range(batch_size):
+            # 隨機模擬讓其中一部分人成為同行好友 (賦予相同的 group_id)
+            batch_group_id = f"g_{int(time.time())}"
+            is_companion_batch = random.choice([True, False])
+            
+            for i in range(batch_size):
                 ln = random.choice(last_names)
                 tit = random.choice(["爺爺", "奶奶"])
                 age = random.choice([60, 70, 80, 90])
-                eqs = random.sample(equips_base, random.randint(1, 3))
+                
+                # 如果是同行批次，前兩位長輩給予相同的目標器材，營造結伴需求
+                if is_companion_batch and i < 2 and batch_size >= 2:
+                    eqs = ["坐推"] # 讓他們想做同一個有機台數的器材
+                else:
+                    eqs = random.sample(equips_base, random.randint(1, 3))
                 
                 p_id = get_or_create_patient_id(ln, tit, age)
-                add_patient(p_id, ln, tit, age, eqs)
+                g_id = batch_group_id if (is_companion_batch and i < 2 and batch_size >= 2) else None
+                add_patient(p_id, ln, tit, age, eqs, group_id=g_id)
                 st.session_state.total_mock_count += 1
             
             st.rerun()
@@ -335,7 +346,6 @@ if st.session_state.waiting_queue:
         p["frozen_wait_seconds"] = wait_seconds
         
         wait_m = wait_seconds / 60
-        # 已移除 15 分鐘強制 999.0 的規定，改為標準 HRRN 計算公式
         p["hrrn_score"] = (max(wait_m, 0.001) + p["service_time"]) / p["service_time"]
     
     st.session_state.waiting_queue.sort(key=lambda x: x["hrrn_score"], reverse=True)
@@ -348,15 +358,41 @@ if st.session_state.waiting_queue:
         available_eqs = [eq for eq, status in st.session_state.equipment_status.items() 
                         if status is None and eq.startswith(target_base)]
         
+        # 友善人性化調整：若該長輩有同行群組(group_id)，且目標器材有兩個以上空位，檢查同伴是否也在佇列中且符合條件
+        assigned = False
         if available_eqs and p["id"] not in busy_ids and not is_cd:
-            eq = available_eqs[0]
-            p["start_time"] = now
-            st.session_state.equipment_status[eq] = p
-            busy_ids.add(p["id"])
-            need_trigger_rerun = True
+            # 檢查是否有同行夥伴
+            group_id = p.get("group_id")
+            if group_id:
+                # 尋找同一群組且目標相同的其他排隊者
+                companions = [comp for comp in st.session_state.waiting_queue 
+                              if comp.get("group_id") == group_id and comp["target_equip"] == target_base and comp["id"] not in busy_ids and comp["id"] not in st.session_state.cooldown_patients]
+                
+                # 如果空機數量足夠容納整個群組（包含當前這一位）
+                if len(available_eqs) >= len(companions):
+                    # 同時分派給這群夥伴，讓他們一起開始
+                    for comp in companions:
+                        comp_avail_eqs = [eq for eq, status in st.session_state.equipment_status.items() if status is None and eq.startswith(target_base)]
+                        if comp_avail_eqs:
+                            eq_to_assign = comp_avail_eqs[0]
+                            comp["start_time"] = now
+                            st.session_state.equipment_status[eq_to_assign] = comp
+                            busy_ids.add(comp["id"])
+                    assigned = True
+                    need_trigger_rerun = True
+            
+            # 若無群組或無法成行，則進行一般單人分派
+            if not assigned:
+                eq = available_eqs[0]
+                p["start_time"] = now
+                st.session_state.equipment_status[eq] = p
+                busy_ids.add(p["id"])
+                need_trigger_rerun = True
         else:
             rem_waiting.append(p)
-    st.session_state.waiting_queue = rem_waiting
+            
+    # 過濾掉已經在本次迴圈被分派出去的人
+    st.session_state.waiting_queue = [p for p in rem_waiting if p["id"] not in busy_ids]
 
 if need_trigger_rerun:
     st.rerun()
@@ -379,6 +415,7 @@ with left_col:
                 "姓名": p["name"],
                 "年齡": f"{p['age']}歲",
                 "目標器材": p["target_equip"],
+                "同行組別": p.get("group_id", "-"),
                 "等待時間": f"{wait_seconds}秒",
                 "優先權分數(HRRN)": round(p.get("hrrn_score", 0), 4)
             })
@@ -451,19 +488,19 @@ with right_col:
                     if is_currently_paused:
                         c1.button(f"⏳ 休息中...", key=f"s_{eq}", disabled=True)
                     else:
-                        if c1.button(f"⏸️ 中斷休息 (1分鐘)", key=f"s_{eq}"):
+                        if c1.button(f"⏸️ 中斷休息 (1分鐘)", key=f"s_{eq}__btn"):
                             p["is_paused"] = True
                             p["pause_start_time"] = time.time()
                             st.rerun()
                             
                     if is_currently_paused:
-                        if c2.button(f"▶️ 跳過休息 (繼續)", key=f"f_{eq}"):
+                        if c2.button(f"▶️ 跳過休息 (繼續)", key=f"f_{eq}__skip"):
                             p["total_paused_duration"] += (time.time() - p["pause_start_time"])
                             p["is_paused"] = False
                             p["pause_start_time"] = 0
                             st.rerun()
                     else:
-                        if c2.button(f"🐇 已完成目標", key=f"f_{eq}"):
+                        if c2.button(f"🐇 已完成目標", key=f"f_{eq}__done"):
                             if p["id"] not in st.session_state.patient_history:
                                 st.session_state.patient_history[p["id"]] = set()
                             st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
