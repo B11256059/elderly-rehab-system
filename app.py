@@ -531,7 +531,7 @@ with right_col:
                     c1, c2 = st.columns(2)
                     
                     if is_currently_paused:
-                        c1.button(f"⏳ 休息中...", key=f"s_{eq}", disabled=True)
+                        c1.button(f"⏳ 休息中", key=f"s_{eq}", disabled=True)
                         if c2.button(f"▶️ 跳過休息", key=f"f_{eq}__skip"):
                             p["total_paused_duration"] += (time.time() - p["pause_start_time"])
                             p["is_paused"] = False
