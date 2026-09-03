@@ -162,7 +162,8 @@ def add_patient(p_id, last_name, title, age, selected_equips, group_id=None):
             "is_paused": False,      
             "pause_start_time": 0,      
             "total_paused_duration": 0,  
-            "group_id": group_id       
+            "group_id": group_id,
+            "manual_current_set": 1  # 追蹤手動/手札點擊的目前組數
         })
 
 # ==========================================
@@ -476,6 +477,7 @@ with right_col:
                     if st.button(f"▶️ 開始復健", key=f"start_{eq}"):
                         p["is_started"] = True
                         p["start_time"] = time.time()
+                        p["manual_current_set"] = 1  # 初始化從第1組開始
                         st.rerun()
                 
                 else:
@@ -486,23 +488,30 @@ with right_col:
                     rest_time = pres["rest_time"]
                     
                     is_auto_resting = False
-                    current_set_num = 1
+                    time_based_set_num = 1
                     auto_rest_left = 0
                     
                     if sets > 1:
                         cycle_time = set_time + rest_time
                         current_cycle_pos = net_active_sec % cycle_time
-                        current_set_num = min(sets, (net_active_sec // cycle_time) + 1)
+                        time_based_set_num = min(sets, (net_active_sec // cycle_time) + 1)
                         
-                        if current_set_num < sets and current_cycle_pos >= set_time:
+                        if time_based_set_num < sets and current_cycle_pos >= set_time:
                             is_auto_resting = True
                             auto_rest_left = max(0, rest_time - (current_cycle_pos - set_time))
                     
-                    # 計算目前進行到第幾組
-                    active_set_display = min(current_set_num, sets)
+                    # 融合自動進度與手動點擊進度（取其最大值，確保手動點擊後能正確遞增）
+                    current_set_num = max(time_based_set_num, p.get("manual_current_set", 1))
+                    if current_set_num > sets:
+                        current_set_num = sets
+                    
+                    # 判斷動態按鈕文字：如果已經是最後一組，顯示「已完成目標」，否則顯示「第 X 組已完成」
+                    if current_set_num >= sets:
+                        done_button_label = "🐇 已完成目標"
+                    else:
+                        done_button_label = f"🐇 第 {current_set_num} 組已完成"
                     
                     if is_currently_paused:
-                        elapsed = int(p["pause_start_time"] - p["start_time"] - p.get("total_paused_duration", 0))
                         remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
                         st.markdown(f"""
                         <div class="status-card paused">
@@ -525,14 +534,13 @@ with right_col:
                         <div class="status-card">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            🏋️ 正在執行: 第 {active_set_display}/{sets} 組訓練<br>
+                            🏋️ 正在執行: 第 {current_set_num}/{sets} 組訓練<br>
                             ⏱️ 淨執行時間: {net_active_sec//60}分{net_active_sec%60}秒 / 處方預計: {p['service_time']}分鐘
                         </div>
                         """, unsafe_allow_html=True)
                     
                     c1, c2 = st.columns(2)
                     
-                    # 依據目前狀態動態調整按鈕佈局（動態顯示第幾組已完成）
                     if is_currently_paused:
                         c1.button(f"⏳ 休息中...", key=f"s_{eq}", disabled=True)
                         if c2.button(f"▶️ 跳過休息", key=f"f_{eq}__skip"):
@@ -542,24 +550,30 @@ with right_col:
                             st.rerun()
                     elif is_auto_resting:
                         c1.button(f"🔄 組間休息中", key=f"s_{eq}_auto", disabled=True)
-                        if c2.button(f"🐇 第 {active_set_display} 組已完成", key=f"f_{eq}__done"):
-                            if p["id"] not in st.session_state.patient_history:
-                                st.session_state.patient_history[p["id"]] = set()
-                            st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
-                            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
-                            st.session_state.equipment_status[eq] = None
+                        if c2.button(done_button_label, key=f"f_{eq}__done"):
+                            if current_set_num >= sets:
+                                if p["id"] not in st.session_state.patient_history:
+                                    st.session_state.patient_history[p["id"]] = set()
+                                st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
+                                st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
+                                st.session_state.equipment_status[eq] = None
+                            else:
+                                p["manual_current_set"] = current_set_num + 1
                             st.rerun()
                     else:
                         if c1.button(f"⏸️ 手動中斷 (1分)", key=f"s_{eq}__btn"):
                             p["is_paused"] = True
                             p["pause_start_time"] = time.time()
                             st.rerun()
-                        if c2.button(f"🐇 第 {active_set_display} 組已完成", key=f"f_{eq}__done"):
-                            if p["id"] not in st.session_state.patient_history:
-                                st.session_state.patient_history[p["id"]] = set()
-                            st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
-                            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
-                            st.session_state.equipment_status[eq] = None
+                        if c2.button(done_button_label, key=f"f_{eq}__done"):
+                            if current_set_num >= sets:
+                                if p["id"] not in st.session_state.patient_history:
+                                    st.session_state.patient_history[p["id"]] = set()
+                                st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
+                                st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
+                                st.session_state.equipment_status[eq] = None
+                            else:
+                                p["manual_current_set"] = current_set_num + 1
                             st.rerun()
             else:
                 st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8; padding: 25px;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
