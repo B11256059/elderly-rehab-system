@@ -27,6 +27,7 @@ st.markdown("""
         border-left: 5px solid #3b82f6; 
         background-color: #eff6ff;
     }
+    .waiting-row { font-size: 0.9em; padding: 10px; border-bottom: 1px solid #e2e8f0; }
     .highlight-text { color: #0e7490; font-weight: bold; }
     .warning-text { color: #b45309; font-weight: bold; }
     </style>
@@ -158,10 +159,10 @@ def add_patient(p_id, last_name, title, age, selected_equips, group_id=None):
             "target_equip": equip, "arrival_time": time.time(),
             "service_time": lookup_table.get((equip, age), 5),
             "prescription_detail": pres_info,
-            "current_set": 1,        
             "is_paused": False,      
             "pause_start_time": 0,      
             "total_paused_duration": 0,  
+            "extra_skip_duration": 0,    # 用來記錄手動提前結束所扣除/增加的時間位移
             "group_id": group_id       
         })
 
@@ -330,7 +331,7 @@ for eq, p in list(st.session_state.equipment_status.items()):
             else:
                 continue
 
-        net_active_seconds = now - p["start_time"] - p.get("total_paused_duration", 0)
+        net_active_seconds = now - p["start_time"] - p.get("total_paused_duration", 0) + p.get("extra_skip_duration", 0)
         
         pres = p["prescription_detail"]
         sets = pres["sets"]
@@ -342,7 +343,6 @@ for eq, p in list(st.session_state.equipment_status.items()):
         else:
             total_required_seconds = (set_time * sets) + (rest_time * (sets - 1))
             
-        # 系統自動判定時間到完成
         if net_active_seconds >= total_required_seconds:
             if p["id"] not in st.session_state.patient_history:
                 st.session_state.patient_history[p["id"]] = set()
@@ -477,31 +477,28 @@ with right_col:
                     if st.button(f"▶️ 開始復健", key=f"start_{eq}"):
                         p["is_started"] = True
                         p["start_time"] = time.time()
-                        p["current_set"] = 1
                         st.rerun()
                 
                 else:
-                    net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
+                    net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0) + p.get("extra_skip_duration", 0))
                     pres = p["prescription_detail"]
                     sets = pres["sets"]
                     set_time = pres["set_time"]
                     rest_time = pres["rest_time"]
                     
                     is_auto_resting = False
-                    calc_set_num = 1
+                    current_set_num = 1
                     auto_rest_left = 0
                     
                     if sets > 1:
                         cycle_time = set_time + rest_time
                         current_cycle_pos = net_active_sec % cycle_time
-                        calc_set_num = min(sets, (net_active_sec // cycle_time) + 1)
+                        current_set_num = min(sets, (net_active_sec // cycle_time) + 1)
                         
-                        if calc_set_num < sets and current_cycle_pos >= set_time:
+                        if current_set_num < sets and current_cycle_pos >= set_time:
                             is_auto_resting = True
                             auto_rest_left = max(0, rest_time - (current_cycle_pos - set_time))
                     
-                    p["current_set"] = calc_set_num
-
                     if is_currently_paused:
                         remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
                         st.markdown(f"""
@@ -516,8 +513,8 @@ with right_col:
                         <div class="status-card auto-resting">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            🔄 <span style="color:#2563eb; font-weight:bold;">組間自動休息中</span> (第 {p['current_set']}/{sets} 組完成)<br>
-                            ⏳ 休息倒數: <span class="warning-text">{auto_rest_left} 秒</span>
+                            🔄 <span style="color:#2563eb; font-weight:bold;">組間自動休息中</span> (第 {current_set_num}/{sets} 組完成)<br>
+                            ⏳ 休息倒數: <span class="warning-text">{auto_rest_left} 秒</span> / 預計總處方: {p['service_time']}分鐘
                         </div>
                         """, unsafe_allow_html=True)
                     else:
@@ -525,8 +522,8 @@ with right_col:
                         <div class="status-card">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            🏋️ 正在執行: 第 {p['current_set']}/{sets} 組訓練<br>
-                            ⏱️ 淨執行時間: {net_active_sec//60}分{net_active_sec%60}秒 / 預計總處方: {p['service_time']}分鐘
+                            🏋️ 正在執行: 第 {min(current_set_num, sets)}/{sets} 組訓練<br>
+                            ⏱️ 淨執行時間: {net_active_sec//60}分{net_active_sec%60}秒 / 處方預計: {p['service_time']}分鐘
                         </div>
                         """, unsafe_allow_html=True)
                     
@@ -541,29 +538,29 @@ with right_col:
                             st.rerun()
                     elif is_auto_resting:
                         c1.button(f"🔄 組間休息中", key=f"s_{eq}_auto", disabled=True)
-                        if c2.button(f"⚠️ 提前結束器材", key=f"f_{eq}__early"):
-                            if p["id"] not in st.session_state.patient_history:
-                                st.session_state.patient_history[p["id"]] = set()
-                            st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
-                            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
-                            st.session_state.equipment_status[eq] = None
+                        if c2.button(f"⚡ 本組提前結束", key=f"f_{eq}__skip_rest"):
+                            # 略過當前自動休息，直接推進到下一組開始（增加額外時間差使 net_active_sec 跨入下一組起點）
+                            current_cycle_pos = net_active_sec % cycle_time
+                            remaining_to_next_set = cycle_time - current_cycle_pos
+                            p["extra_skip_duration"] = p.get("extra_skip_duration", 0) + remaining_to_next_set
                             st.rerun()
                     else:
                         if c1.button(f"⏸️ 手動中斷 (1分)", key=f"s_{eq}__btn"):
                             p["is_paused"] = True
                             p["pause_start_time"] = time.time()
                             st.rerun()
-                        
-                        # 每組獨立按鈕：直接手動控制當組完成，做到最後一組時即可完成本器材
-                        btn_label = f"✅ 完成第 {p['current_set']} 組" if p['current_set'] < sets else f"🏁 完成本器材"
-                        if c2.button(btn_label, key=f"f_{eq}__done_set"):
-                            if p['current_set'] < sets:
-                                target_set_start_sec = p['current_set'] * (set_time + rest_time)
-                                current_net = time.time() - p["start_time"] - p.get("total_paused_duration", 0)
-                                if current_net < target_set_start_sec:
-                                    p["total_paused_duration"] += (target_set_start_sec - current_net)
+                            
+                        # 改為「本組提前結束」按鈕，若為最後一組點擊則直接完成該器材處方
+                        btn_label = f"⚡ 第 {current_set_num} 組提前結束" if sets > 1 else f"🐇 已完成目標"
+                        if c2.button(btn_label, key=f"f_{eq}__done"):
+                            if sets > 1 and current_set_num < sets:
+                                # 提前結束當前組，直接推進到下一個組別的起點
+                                current_cycle_pos = net_active_sec % cycle_time
+                                remaining_to_next_cycle = cycle_time - current_cycle_pos
+                                p["extra_skip_duration"] = p.get("extra_skip_duration", 0) + remaining_to_next_cycle
                                 st.rerun()
                             else:
+                                # 全部組別完成或單組處方完成，正式結算並進入換場休息
                                 if p["id"] not in st.session_state.patient_history:
                                     st.session_state.patient_history[p["id"]] = set()
                                 st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
