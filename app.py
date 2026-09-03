@@ -176,7 +176,6 @@ with st.sidebar:
             equips_base = ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]
             
             remaining = 20 - st.session_state.total_mock_count
-            # 隨機決定這次注入的類型：1: 單人, 2: 2人同行, 3: 3人同行
             inject_mode = random.choices([1, 2, 3], weights=[50, 30, 20], k=1)[0]
             batch_size = min(inject_mode, remaining)
             
@@ -191,7 +190,6 @@ with st.sidebar:
                 st.session_state.total_mock_count += 1
             
             elif batch_size == 2:
-                # 2人同行（共用相同器材以測試同步）
                 eqs = [random.choice(equips_base)]
                 
                 ln1 = random.choice(last_names)
@@ -205,7 +203,6 @@ with st.sidebar:
                 st.session_state.total_mock_count += 2
                 
             elif batch_size >= 3:
-                # 3人同行
                 eqs = [random.choice(equips_base)]
                 
                 ln1 = random.choice(last_names)
@@ -271,7 +268,6 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
         with col3:
             input_age = st.selectbox("年齡層", [60, 70, 80, 90], format_func=lambda x:f"{x}歲", key=f"age_widget_{st.session_state.form_version}")
         with col4:
-            # 介面上方或提示已說明只需打數字，這裡輸入框接收純數字
             input_comp_id = st.text_input("同行者編號 (選填)", value=st.session_state.input_companion_id, placeholder="例如：1", key=f"comp_widget_{st.session_state.form_version}")
         
         input_equips = st.multiselect("復健處方器材 (可多選)", ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"], default=st.session_state.input_equips, key=f"eqs_widget_{st.session_state.form_version}")
@@ -300,7 +296,7 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
                 
                 if target_comp_str:
                     try:
-                        target_comp_id = int(target_comp_str) # 轉成整數比對
+                        target_comp_id = int(target_comp_str)
                         existing_ids = list(st.session_state.patient_registry.values())
                         
                         if target_comp_id in existing_ids:
@@ -453,7 +449,7 @@ if need_trigger_rerun:
     st.rerun()
 
 # ==========================================
-# 7. 前端雙欄看板呈現 (表格內編號加上 # 號固定顯示)
+# 7. 前端雙欄看板呈現
 # ==========================================
 st.write("---")
 left_col, right_col = st.columns([1.2, 1])
@@ -465,12 +461,16 @@ with left_col:
         display_data = []
         for p in st.session_state.waiting_queue:
             wait_seconds = int(now - p["arrival_time"])
+            # 修正處：使用變數或字串串接避免巢狀引號衝突
+            id_str = f"#{p['id']:03d}"
+            group_str = f"#{p['group_id']:03d}" if p.get("group_id") else "-"
+            
             display_data.append({
-                "長輩編號": f"#{p['id']:03d}",
+                "長輩編號": id_str,
                 "姓名": p["name"],
                 "年齡": f"{p['age']}歲",
                 "目標器材": p["target_equip"],
-                "同行組別": f"#{p['group_id']:03d}" if p.get("group_id") else "-",
+                "同行組別": group_str,
                 "等待時間": f"{wait_seconds}秒",
                 "優先權分數(HRRN)": round(p.get("hrrn_score", 0), 4)
             })
