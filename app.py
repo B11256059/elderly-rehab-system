@@ -143,7 +143,7 @@ MID_PAUSE_SECONDS = 60
 def get_or_create_patient_id(last_name, title, age):
     reg_key = (last_name, title, age)
     if reg_key not in st.session_state.patient_registry:
-        p_id = st.session_state.patient_id_counter # 數字編號，例如 1, 2, 3...
+        p_id = st.session_state.patient_id_counter
         st.session_state.patient_registry[reg_key] = p_id
         st.session_state.patient_id_counter += 1
     else:
@@ -164,70 +164,67 @@ def add_patient(p_id, last_name, title, age, selected_equips, group_id=None):
         })
 
 # ==========================================
-# 5. 側邊欄模擬與控制 (支援 2 人或 3 人同行測試)
+# 5. 側邊欄模擬與控制 (統一由分批注入隨機產生單人、2人同行或3人同行)
 # ==========================================
 with st.sidebar:
     st.header("👥 模擬情境")
     st.write(f"當前已模擬人數: {st.session_state.total_mock_count} / 20")
     
-    if st.button("🚀 分批注入 (3-5人)"):
+    if st.button("🚀 分批注入 (自動隨機單人/多人同行)"):
         if st.session_state.total_mock_count < 20:
-            last_names = ["王", "陳", "林", "張", "李", "吳", "劉", "蔡", "楊", "黃", "曾"]
+            last_names = ["王", "陳", "林", "張", "李", "吳", "劉", "蔡", "楊", "黃", "曾", "洪", "郭", "馬", "徐"]
             equips_base = ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]
             
             remaining = 20 - st.session_state.total_mock_count
-            batch_size = min(random.randint(3, 5), remaining)
+            # 隨機決定這次注入的類型：1: 單人, 2: 2人同行, 3: 3人同行
+            inject_mode = random.choices([1, 2, 3], weights=[50, 30, 20], k=1)[0]
+            batch_size = min(inject_mode, remaining)
             
-            for _ in range(batch_size):
+            if batch_size == 1:
                 ln = random.choice(last_names)
                 tit = random.choice(["爺爺", "奶奶"])
                 age = random.choice([60, 70, 80, 90])
-                eqs = random.sample(equips_base, random.randint(1, 3))
+                eqs = random.sample(equips_base, random.randint(1, 2))
                 
                 p_id = get_or_create_patient_id(ln, tit, age)
                 add_patient(p_id, ln, tit, age, eqs, group_id=None)
                 st.session_state.total_mock_count += 1
             
+            elif batch_size == 2:
+                # 2人同行（共用相同器材以測試同步）
+                eqs = [random.choice(equips_base)]
+                
+                ln1 = random.choice(last_names)
+                p1_id = get_or_create_patient_id(ln1, "爺爺", 70)
+                add_patient(p1_id, ln1, "爺爺", 70, eqs, group_id=None)
+                
+                ln2 = random.choice(last_names)
+                p2_id = get_or_create_patient_id(ln2, "奶奶", 72)
+                add_patient(p2_id, ln2, "奶奶", 72, eqs, group_id=p1_id)
+                
+                st.session_state.total_mock_count += 2
+                
+            elif batch_size >= 3:
+                # 3人同行
+                eqs = [random.choice(equips_base)]
+                
+                ln1 = random.choice(last_names)
+                p1_id = get_or_create_patient_id(ln1, "伯伯", 65)
+                add_patient(p1_id, ln1, "伯伯", 65, eqs, group_id=None)
+                
+                ln2 = random.choice(last_names)
+                p2_id = get_or_create_patient_id(ln2, "阿姨", 68)
+                add_patient(p2_id, ln2, "阿姨", 68, eqs, group_id=p1_id)
+                
+                ln3 = random.choice(last_names)
+                p3_id = get_or_create_patient_id(ln3, "叔叔", 70)
+                add_patient(p3_id, ln3, "叔叔", 70, eqs, group_id=p1_id)
+                
+                st.session_state.total_mock_count += 3
+            
             st.rerun()
         else:
             st.warning("已達模擬上限 20 人！")
-
-    # 新增：快速測試 2 人同行
-    if st.button("👫 模擬 2 人同行報到"):
-        last_names = ["王", "李"]
-        equips = ["坐推"] # 預設都選坐推，最容易看出同時上機
-        
-        # 第一位
-        p1_id = get_or_create_patient_id(last_names[0], "爺爺", 70)
-        add_patient(p1_id, last_names[0], "爺爺", 70, equips, group_id=None)
-        
-        # 第二位 (同行，綁定第一位編號)
-        p2_id = get_or_create_patient_id(last_names[1], "奶奶", 75)
-        add_patient(p2_id, last_names[1], "奶奶", 75, equips, group_id=p1_id)
-        
-        st.session_state.total_mock_count += 2
-        st.success("已成功模擬 2 人同行報到！")
-        st.rerun()
-
-    # 新增：快速測試 3 人同行
-    if st.button("👨‍👩‍👧 模擬 3 人同行報到"):
-        last_names = ["張", "陳", "林"]
-        equips = ["坐推"]
-        
-        # 第一位
-        p1_id = get_or_create_patient_id(last_names[0], "爺爺", 70)
-        add_patient(p1_id, last_names[0], "爺爺", 70, equips, group_id=None)
-        
-        # 第二位、第三位 (都綁定第一位編號)
-        p2_id = get_or_create_patient_id(last_names[1], "奶奶", 68)
-        add_patient(p2_id, last_names[1], "奶奶", 68, equips, group_id=p1_id)
-        
-        p3_id = get_or_create_patient_id(last_names[2], "伯伯", 72)
-        add_patient(p3_id, last_names[2], "伯伯", 72, equips, group_id=p1_id)
-        
-        st.session_state.total_mock_count += 3
-        st.success("已成功模擬 3 人同行報到！")
-        st.rerun()
     
     if st.button("🧹 清空所有數據"):
         st.session_state.waiting_queue = []
@@ -263,7 +260,7 @@ m3.metric("換場休息中(3分/人)", f"{len(st.session_state.cooldown_patients
 
 with st.expander("➕ 長輩報到與處方登記", expanded=True):
     next_preview_id = st.session_state.patient_id_counter
-    st.info(f"💡 提示：下一位獨立報到的長輩系統編號為 **{next_preview_id}**。若與其他人同行，直接在下方輸入**同行者的數字編號**即可（例如多人同行，全部都填最早那個人或其中一個人的數字號碼即可）。")
+    st.info(f"💡 提示：下一位獨立報到的長輩系統編號為 **#{next_preview_id}**。若與其他人同行，直接在下方輸入**純數字**（例如 1、2），系統會自動帶入 `#` 號與對方綁定。")
 
     with st.form(key="patient_input_form"):
         col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
@@ -274,7 +271,7 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
         with col3:
             input_age = st.selectbox("年齡層", [60, 70, 80, 90], format_func=lambda x:f"{x}歲", key=f"age_widget_{st.session_state.form_version}")
         with col4:
-            # 純數字輸入，完全拿掉井字號
+            # 介面上方或提示已說明只需打數字，這裡輸入框接收純數字
             input_comp_id = st.text_input("同行者編號 (選填)", value=st.session_state.input_companion_id, placeholder="例如：1", key=f"comp_widget_{st.session_state.form_version}")
         
         input_equips = st.multiselect("復健處方器材 (可多選)", ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"], default=st.session_state.input_equips, key=f"eqs_widget_{st.session_state.form_version}")
@@ -303,7 +300,7 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
                 
                 if target_comp_str:
                     try:
-                        target_comp_id = int(target_comp_str) # 轉成整數進行比對
+                        target_comp_id = int(target_comp_str) # 轉成整數比對
                         existing_ids = list(st.session_state.patient_registry.values())
                         
                         if target_comp_id in existing_ids:
@@ -361,7 +358,7 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
                     st.session_state.form_version += 1
                     st.session_state.form_status = {
                         "type": "success",
-                        "msg": f"⭕ 登記成功！您的編號是 {p_id}" + (f"，已與編號 {target_comp_id} 等人綁定同行！" if final_group_id else "")
+                        "msg": f"⭕ 登記成功！您的編號是 #{p_id}" + (f"，已與編號 #{target_comp_id} 等人綁定同行！" if final_group_id else "")
                     }
                     st.rerun()
         
@@ -370,7 +367,7 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
         elif st.session_state.form_status["type"] == "success":
             st.success(st.session_state.form_status["msg"])
 
-# --- HRRN 核心調度與時間維護邏輯 (支援多人群組同步) ---
+# --- HRRN 核心調度與時間維護邏輯 ---
 now = time.time()
 need_trigger_rerun = False 
 
@@ -424,14 +421,12 @@ if st.session_state.waiting_queue:
         if available_eqs and p["id"] not in busy_ids and not is_cd:
             group_id = p.get("group_id")
             if group_id:
-                # 找出同組且目標器材相同的其他人（不論是 2 人還是 3 人同行）
                 companions = [comp for comp in st.session_state.waiting_queue 
                               if (comp.get("group_id") == group_id or comp["id"] == group_id) 
                               and comp["target_equip"] == target_base 
                               and comp["id"] not in busy_ids 
                               and comp["id"] not in st.session_state.cooldown_patients]
                 
-                # 只要現場空機台數量大於或等於這群同行的總人數，就一次全部同時分派！
                 if len(available_eqs) >= len(companions):
                     for comp in companions:
                         comp_avail_eqs = [eq for eq, status in st.session_state.equipment_status.items() if status is None and eq.startswith(target_base)]
@@ -458,7 +453,7 @@ if need_trigger_rerun:
     st.rerun()
 
 # ==========================================
-# 7. 前端雙欄看板呈現
+# 7. 前端雙欄看板呈現 (表格內編號加上 # 號固定顯示)
 # ==========================================
 st.write("---")
 left_col, right_col = st.columns([1.2, 1])
@@ -471,11 +466,11 @@ with left_col:
         for p in st.session_state.waiting_queue:
             wait_seconds = int(now - p["arrival_time"])
             display_data.append({
-                "長輩編號": p["id"],
+                "長輩編號": f"#{p['id']:03d}",
                 "姓名": p["name"],
                 "年齡": f"{p['age']}歲",
                 "目標器材": p["target_equip"],
-                "同行組別": p.get("group_id") if p.get("group_id") else "-",
+                "同行組別": f"#{p['group_id']:03d}" if p.get("group_id") else "-",
                 "等待時間": f"{wait_seconds}秒",
                 "優先權分數(HRRN)": round(p.get("hrrn_score", 0), 4)
             })
@@ -513,7 +508,7 @@ with right_col:
                     st.markdown(f"""
                     <div class="status-card" style="background-color: {bg_color}; border-left: 5px solid {border_color};">
                         <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                        👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [編號: {p['id']}]</span><br>
+                        👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
                         狀態: <span style="color:{'#b91c1c' if wait_time > 60 else '#1d4ed8'}; font-weight:bold;">{status_text}</span>
                     </div>
                     """, unsafe_allow_html=True)
@@ -530,7 +525,7 @@ with right_col:
                         st.markdown(f"""
                         <div class="status-card paused">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [編號: {p['id']}]</span><br>
+                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
                             ⏱️ 實際已執行: {elapsed//60}分{elapsed%60}秒 <span class="warning-text">(休息倒數: {remaining_pause}秒)</span>
                         </div>
                         """, unsafe_allow_html=True)
@@ -539,7 +534,7 @@ with right_col:
                         st.markdown(f"""
                         <div class="status-card">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [編號: {p['id']}]</span><br>
+                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
                             ⏱️ 已執行: {elapsed//60}分{elapsed%60}秒 / 處方預計: {p['service_time']}分鐘
                         </div>
                         """, unsafe_allow_html=True)
