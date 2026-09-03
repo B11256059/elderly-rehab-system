@@ -73,22 +73,15 @@ def format_unit(value, unit):
     if unit in val_str or "不適用" in val_str: return val_str
     return f"{val_str} {unit}"
 
-def extract_number(value):
-    val_str = str(value).strip()
-    if "不適用" in val_str: return 0
-    numbers = re.findall(r'\d+', val_str)
-    return int(numbers[0]) if numbers else 0
-
 matrix_rows = []
 lookup_table = {}
-prescription_details = {} # 用來精準儲存：組數、單組時間、休息時間
+prescription_details = {}
 
 for item in raw_data:
     sets = int(item["組數"])
     set_time = int(item["組時間"])
     rest_time = int(item["休息時間"])
     
-    # 總時間計算（秒轉分，無條件進位或四捨五入）
     if sets > 1:
         total_seconds = (set_time * sets) + (rest_time * (sets - 1))
     else:
@@ -191,10 +184,7 @@ with st.sidebar:
             batch_size = min(inject_mode, remaining)
             
             if batch_size == 1:
-                ln = random.choice(last_names)
-                tit = random.choice(titles_base)
-                age = random.choice(ages_base)
-                eqs = random.sample(equips_base, random.randint(1, 3))
+                ln = random.choice(last_names); tit = random.choice(titles_base); age = random.choice(ages_base); eqs = random.sample(equips_base, random.randint(1, 3))
                 p_id = get_or_create_patient_id(ln, tit, age)
                 add_patient(p_id, ln, tit, age, eqs, group_id=None)
                 st.session_state.total_mock_count += 1
@@ -332,7 +322,6 @@ need_trigger_rerun = False
 
 for eq, p in list(st.session_state.equipment_status.items()):
     if p:
-        # 手動中斷休息處理
         if p.get("is_paused", False):
             if now - p["pause_start_time"] >= MID_PAUSE_SECONDS:
                 p["total_paused_duration"] += MID_PAUSE_SECONDS
@@ -341,7 +330,6 @@ for eq, p in list(st.session_state.equipment_status.items()):
             else:
                 continue
 
-        # 計算扣除暫停後的淨執行時間（秒）
         net_active_seconds = now - p["start_time"] - p.get("total_paused_duration", 0)
         
         pres = p["prescription_detail"]
@@ -349,19 +337,12 @@ for eq, p in list(st.session_state.equipment_status.items()):
         set_time = pres["set_time"]
         rest_time = pres["rest_time"]
         
-        # 單一循環總時間 (1組運動 + 1組休息)
-        cycle_time = set_time + rest_time
-        
-        # 判斷目前跑到第幾組或是否結束
         if sets <= 1:
-            # 若只有1組，直接看淨執行時間是否大於單組時間
             total_required_seconds = set_time
         else:
-            # 多組情況：最後一組不需要加上後續休息
             total_required_seconds = (set_time * sets) + (rest_time * (sets - 1))
             
         if net_active_seconds >= total_required_seconds:
-            # 整個處方完成
             if p["id"] not in st.session_state.patient_history:
                 st.session_state.patient_history[p["id"]] = set()
             st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
@@ -498,7 +479,6 @@ with right_col:
                         st.rerun()
                 
                 else:
-                    # 計算自動組間休息邏輯
                     net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
                     pres = p["prescription_detail"]
                     sets = pres["sets"]
@@ -510,7 +490,6 @@ with right_col:
                     auto_rest_left = 0
                     
                     if sets > 1:
-                        # 檢查目前落在哪個循環
                         cycle_time = set_time + rest_time
                         current_cycle_pos = net_active_sec % cycle_time
                         current_set_num = min(sets, (net_active_sec // cycle_time) + 1)
@@ -549,21 +528,29 @@ with right_col:
                         """, unsafe_allow_html=True)
                     
                     c1, c2 = st.columns(2)
+                    
+                    # 依據目前狀態動態調整按鈕佈局（組間自動休息時不顯示手動中斷按鈕）
                     if is_currently_paused:
                         c1.button(f"⏳ 休息中...", key=f"s_{eq}", disabled=True)
-                    else:
-                        if c1.button(f"⏸️ 手動中斷 (1分)", key=f"s_{eq}__btn"):
-                            p["is_paused"] = True
-                            p["pause_start_time"] = time.time()
-                            st.rerun()
-                            
-                    if is_currently_paused:
                         if c2.button(f"▶️ 跳過休息", key=f"f_{eq}__skip"):
                             p["total_paused_duration"] += (time.time() - p["pause_start_time"])
                             p["is_paused"] = False
                             p["pause_start_time"] = 0
                             st.rerun()
+                    elif is_auto_resting:
+                        c1.button(f"🔄 組間休息中", key=f"s_{eq}_auto", disabled=True)
+                        if c2.button(f"🐇 已完成目標", key=f"f_{eq}__done"):
+                            if p["id"] not in st.session_state.patient_history:
+                                st.session_state.patient_history[p["id"]] = set()
+                            st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
+                            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
+                            st.session_state.equipment_status[eq] = None
+                            st.rerun()
                     else:
+                        if c1.button(f"⏸️ 手動中斷 (1分)", key=f"s_{eq}__btn"):
+                            p["is_paused"] = True
+                            p["pause_start_time"] = time.time()
+                            st.rerun()
                         if c2.button(f"🐇 已完成目標", key=f"f_{eq}__done"):
                             if p["id"] not in st.session_state.patient_history:
                                 st.session_state.patient_history[p["id"]] = set()
