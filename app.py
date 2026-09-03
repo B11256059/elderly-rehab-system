@@ -24,8 +24,8 @@ st.markdown("""
         background-color: #fefce8;
     }
     .status-card.auto-resting {
-        border-left: 5px solid #3b82f6; 
-        background-color: #eff6ff;
+        border-left: 5px solid #10b981; 
+        background-color: #f0fdf4;
     }
     .waiting-row { font-size: 0.9em; padding: 10px; border-bottom: 1px solid #e2e8f0; }
     .highlight-text { color: #0e7490; font-weight: bold; }
