@@ -498,6 +498,9 @@ with right_col:
                             is_auto_resting = True
                             auto_rest_left = max(0, rest_time - (current_cycle_pos - set_time))
                     
+                    # 計算目前進行到第幾組
+                    active_set_display = min(current_set_num, sets)
+                    
                     if is_currently_paused:
                         elapsed = int(p["pause_start_time"] - p["start_time"] - p.get("total_paused_duration", 0))
                         remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
@@ -522,14 +525,14 @@ with right_col:
                         <div class="status-card">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            🏋️ 正在執行: 第 {min(current_set_num, sets)}/{sets} 組訓練<br>
+                            🏋️ 正在執行: 第 {active_set_display}/{sets} 組訓練<br>
                             ⏱️ 淨執行時間: {net_active_sec//60}分{net_active_sec%60}秒 / 處方預計: {p['service_time']}分鐘
                         </div>
                         """, unsafe_allow_html=True)
                     
                     c1, c2 = st.columns(2)
                     
-                    # 依據目前狀態動態調整按鈕佈局（組間自動休息時不顯示手動中斷按鈕）
+                    # 依據目前狀態動態調整按鈕佈局（動態顯示第幾組已完成）
                     if is_currently_paused:
                         c1.button(f"⏳ 休息中...", key=f"s_{eq}", disabled=True)
                         if c2.button(f"▶️ 跳過休息", key=f"f_{eq}__skip"):
@@ -539,7 +542,7 @@ with right_col:
                             st.rerun()
                     elif is_auto_resting:
                         c1.button(f"🔄 組間休息中", key=f"s_{eq}_auto", disabled=True)
-                        if c2.button(f"🐇 已完成目標", key=f"f_{eq}__done"):
+                        if c2.button(f"🐇 第 {active_set_display} 組已完成", key=f"f_{eq}__done"):
                             if p["id"] not in st.session_state.patient_history:
                                 st.session_state.patient_history[p["id"]] = set()
                             st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
@@ -551,7 +554,7 @@ with right_col:
                             p["is_paused"] = True
                             p["pause_start_time"] = time.time()
                             st.rerun()
-                        if c2.button(f"🐇 已完成目標", key=f"f_{eq}__done"):
+                        if c2.button(f"🐇 第 {active_set_display} 組已完成", key=f"f_{eq}__done"):
                             if p["id"] not in st.session_state.patient_history:
                                 st.session_state.patient_history[p["id"]] = set()
                             st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
