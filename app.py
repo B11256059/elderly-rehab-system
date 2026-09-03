@@ -127,6 +127,7 @@ if "cooldown_patients" not in st.session_state: st.session_state.cooldown_patien
 if "patient_id_counter" not in st.session_state: st.session_state.patient_id_counter = 1
 if "patient_registry" not in st.session_state: st.session_state.patient_registry = {}
 if "patient_history" not in st.session_state: st.session_state.patient_history = {}
+if "patient_groups" not in st.session_state: st.session_state.patient_groups = {} # 記錄互相牽連的組別成員
 
 if "input_last_name" not in st.session_state: st.session_state.input_last_name = ""
 if "input_companion_id" not in st.session_state: st.session_state.input_companion_id = "" 
@@ -164,7 +165,7 @@ def add_patient(p_id, last_name, title, age, selected_equips, group_id=None):
         })
 
 # ==========================================
-# 5. 側邊欄模擬與控制 (統一由分批注入隨機產生單人、2人同行或3人同行)
+# 5. 側邊欄模擬與控制 (分批注入隨機單人、2人同行或3人同行)
 # ==========================================
 with st.sidebar:
     st.header("👥 模擬情境")
@@ -200,22 +201,31 @@ with st.sidebar:
                 p2_id = get_or_create_patient_id(ln2, "奶奶", 72)
                 add_patient(p2_id, ln2, "奶奶", 72, eqs, group_id=p1_id)
                 
+                # 雙向群組記錄
+                st.session_state.patient_groups[p1_id] = {p1_id, p2_id}
+                st.session_state.patient_groups[p2_id] = {p1_id, p2_id}
+                
                 st.session_state.total_mock_count += 2
                 
             elif batch_size >= 3:
                 eqs = [random.choice(equips_base)]
                 
                 ln1 = random.choice(last_names)
-                p1_id = get_or_create_patient_id(ln1, "伯伯", 65)
-                add_patient(p1_id, ln1, "伯伯", 65, eqs, group_id=None)
+                p1_id = get_or_create_patient_id(ln1, "爺爺", 65)
+                add_patient(p1_id, ln1, "爺爺", 65, eqs, group_id=None)
                 
                 ln2 = random.choice(last_names)
-                p2_id = get_or_create_patient_id(ln2, "阿姨", 68)
-                add_patient(p2_id, ln2, "阿姨", 68, eqs, group_id=p1_id)
+                p2_id = get_or_create_patient_id(ln2, "奶奶", 68)
+                add_patient(p2_id, ln2, "奶奶", 68, eqs, group_id=p1_id)
                 
                 ln3 = random.choice(last_names)
-                p3_id = get_or_create_patient_id(ln3, "叔叔", 70)
-                add_patient(p3_id, ln3, "叔叔", 70, eqs, group_id=p1_id)
+                p3_id = get_or_create_patient_id(ln3, "爺爺", 70)
+                add_patient(p3_id, ln3, "爺爺", 70, eqs, group_id=p1_id)
+                
+                group_set = {p1_id, p2_id, p3_id}
+                st.session_state.patient_groups[p1_id] = group_set
+                st.session_state.patient_groups[p2_id] = group_set
+                st.session_state.patient_groups[p3_id] = group_set
                 
                 st.session_state.total_mock_count += 3
             
@@ -229,6 +239,7 @@ with st.sidebar:
         st.session_state.cooldown_patients = {}
         st.session_state.patient_registry = {}
         st.session_state.patient_history = {}
+        st.session_state.patient_groups = {}
         st.session_state.patient_id_counter = 1
         st.session_state.total_mock_count = 0 
         st.session_state.start_system_timestamp = time.time()
@@ -257,7 +268,7 @@ m3.metric("換場休息中(3分/人)", f"{len(st.session_state.cooldown_patients
 
 with st.expander("➕ 長輩報到與處方登記", expanded=True):
     next_preview_id = st.session_state.patient_id_counter
-    st.info(f"💡 提示：下一位獨立報到的長輩系統編號為 **#{next_preview_id}**。若與其他人同行，直接在下方輸入**純數字**（例如 1、2），系統會自動帶入 `#` 號與對方綁定。")
+    st.info(f"💡 提示：下一位獨立報到的長輩系統編號為 **#{next_preview_id}**。若與其他人同行，直接在下方輸入**純數字**（例如 1、2），系統會自動帶入 `#` 號與對方雙向綁定。")
 
     with st.form(key="patient_input_form"):
         col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
@@ -300,12 +311,18 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
                         existing_ids = list(st.session_state.patient_registry.values())
                         
                         if target_comp_id in existing_ids:
-                            found_group = target_comp_id 
+                            final_group_id = target_comp_id 
                             for q_item in st.session_state.waiting_queue:
                                 if q_item["id"] == target_comp_id and q_item.get("group_id"):
-                                    found_group = q_item["group_id"]
+                                    final_group_id = q_item["group_id"]
                                     break
-                            final_group_id = found_group
+                            
+                            # 建立雙向群組對應
+                            if target_comp_id not in st.session_state.patient_groups:
+                                st.session_state.patient_groups[target_comp_id] = {target_comp_id}
+                            st.session_state.patient_groups[target_comp_id].add(p_id)
+                            st.session_state.patient_groups[p_id] = st.session_state.patient_groups[target_comp_id]
+                            
                         else:
                             st.session_state.form_status = {
                                 "type": "warning",
@@ -449,7 +466,7 @@ if need_trigger_rerun:
     st.rerun()
 
 # ==========================================
-# 7. 前端雙欄看板呈現
+# 7. 前端雙欄看板呈現 (雙向顯示同行編號)
 # ==========================================
 st.write("---")
 left_col, right_col = st.columns([1.2, 1])
@@ -461,9 +478,16 @@ with left_col:
         display_data = []
         for p in st.session_state.waiting_queue:
             wait_seconds = int(now - p["arrival_time"])
-            # 修正處：使用變數或字串串接避免巢狀引號衝突
             id_str = f"#{p['id']:03d}"
-            group_str = f"#{p['group_id']:03d}" if p.get("group_id") else "-"
+            
+            # 讓同組所有人（包含最前面先報到的人）互相顯示其他同伴的編號
+            p_id = p["id"]
+            if p_id in st.session_state.patient_groups:
+                group_members = st.session_state.patient_groups[p_id]
+                other_members = [f"#{m:03d}" for m in group_members if m != p_id]
+                group_str = ", ".join(other_members) if other_members else "-"
+            else:
+                group_str = f"#{p['group_id']:03d}" if p.get("group_id") else "-"
             
             display_data.append({
                 "長輩編號": id_str,
