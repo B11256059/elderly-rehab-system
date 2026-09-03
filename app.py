@@ -92,8 +92,7 @@ for item in raw_data:
     prescription_details[(item["器材"], item["年齡"])] = {
         "sets": sets,
         "set_time": set_time,
-        "rest_time": rest_time,
-        "total_seconds": total_seconds
+        "rest_time": rest_time
     }
 
     matrix_rows.append({
@@ -153,7 +152,7 @@ def get_or_create_patient_id(last_name, title, age):
 
 def add_patient(p_id, last_name, title, age, selected_equips, group_id=None):
     for equip in selected_equips:
-        pres_info = prescription_details.get((equip, age), {"sets": 3, "set_time": 30, "rest_time": 60, "total_seconds": 150})
+        pres_info = prescription_details.get((equip, age), {"sets": 3, "set_time": 30, "rest_time": 60})
         st.session_state.waiting_queue.append({
             "id": p_id, "name": f"{last_name}{title}", "age": age,
             "target_equip": equip, "arrival_time": time.time(),
@@ -332,8 +331,16 @@ for eq, p in list(st.session_state.equipment_status.items()):
                 continue
 
         net_active_seconds = now - p["start_time"] - p.get("total_paused_duration", 0)
+        
         pres = p["prescription_detail"]
-        total_required_seconds = pres["total_seconds"]
+        sets = pres["sets"]
+        set_time = pres["set_time"]
+        rest_time = pres["rest_time"]
+        
+        if sets <= 1:
+            total_required_seconds = set_time
+        else:
+            total_required_seconds = (set_time * sets) + (rest_time * (sets - 1))
             
         # 系統自動判定時間到完成
         if net_active_seconds >= total_required_seconds:
@@ -517,7 +524,7 @@ with right_col:
                         st.markdown(f"""
                         <div class="status-card">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                            👤 Use使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
+                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
                             🏋️ 正在執行: 第 {p['current_set']}/{sets} 組訓練<br>
                             ⏱️ 淨執行時間: {net_active_sec//60}分{net_active_sec%60}秒 / 預計總處方: {p['service_time']}分鐘
                         </div>
@@ -534,8 +541,10 @@ with right_col:
                             st.rerun()
                     elif is_auto_resting:
                         c1.button(f"🔄 組間休息中", key=f"s_{eq}_auto", disabled=True)
-                        if c2.button(f"⚠️ 提早結束 (未達標)", key=f"f_{eq}__early"):
-                            # 提早結束：不記入歷史完成紀錄，直接釋放機器
+                        if c2.button(f"⚠️ 提前結束器材", key=f"f_{eq}__early"):
+                            if p["id"] not in st.session_state.patient_history:
+                                st.session_state.patient_history[p["id"]] = set()
+                            st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
                             st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
                             st.session_state.equipment_status[eq] = None
                             st.rerun()
@@ -545,19 +554,22 @@ with right_col:
                             p["pause_start_time"] = time.time()
                             st.rerun()
                         
-                        # 簡化按鈕：只有一個「結束使用」
-                        # 系統會自動判斷：如果時間/組數還差很多，就是未完成；做完了才是正常完成。
-                        if c2.button(f"🛑 結束使用 (結算)", key=f"f_{eq}__finish"):
-                            total_target = pres["total_seconds"]
-                            # 如果實際運動時間達到總要求的 80% 以上，才視為「完成目標」
-                            if net_active_sec >= total_target * 0.8:
+                        # 每組獨立按鈕：直接手動控制當組完成，做到最後一組時即可完成本器材
+                        btn_label = f"✅ 完成第 {p['current_set']} 組" if p['current_set'] < sets else f"🏁 完成本器材"
+                        if c2.button(btn_label, key=f"f_{eq}__done_set"):
+                            if p['current_set'] < sets:
+                                target_set_start_sec = p['current_set'] * (set_time + rest_time)
+                                current_net = time.time() - p["start_time"] - p.get("total_paused_duration", 0)
+                                if current_net < target_set_start_sec:
+                                    p["total_paused_duration"] += (target_set_start_sec - current_net)
+                                st.rerun()
+                            else:
                                 if p["id"] not in st.session_state.patient_history:
                                     st.session_state.patient_history[p["id"]] = set()
                                 st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
-                            
-                            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
-                            st.session_state.equipment_status[eq] = None
-                            st.rerun()
+                                st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
+                                st.session_state.equipment_status[eq] = None
+                                st.rerun()
             else:
                 st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8; padding: 25px;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
 
