@@ -134,6 +134,7 @@ if "patient_registry" not in st.session_state: st.session_state.patient_registry
 if "patient_history" not in st.session_state: st.session_state.patient_history = {}
 
 if "input_last_name" not in st.session_state: st.session_state.input_last_name = ""
+if "input_group_id" not in st.session_state: st.session_state.input_group_id = "" # 新增：表單欄位狀態保持
 if "input_equips" not in st.session_state: st.session_state.input_equips = []
 if "form_version" not in st.session_state: st.session_state.form_version = 0
 if "form_status" not in st.session_state: st.session_state.form_status = {"type": None, "msg": None}
@@ -164,11 +165,11 @@ def add_patient(p_id, last_name, title, age, selected_equips, group_id=None):
             "is_paused": False,      
             "pause_start_time": 0,      
             "total_paused_duration": 0,  
-            "group_id": group_id       # 新增：同行群組 ID 支援結伴並肩復健
+            "group_id": group_id       # 接收手動輸入或模擬的同行群組 ID
         })
 
 # ==========================================
-# 5. 側邊欄模擬與控制
+# 5. 側邊欄模擬與控制 (已拿掉隨機同行，純粹分批注入單人)
 # ==========================================
 with st.sidebar:
     st.header("👥 模擬情境")
@@ -182,24 +183,14 @@ with st.sidebar:
             remaining = 20 - st.session_state.total_mock_count
             batch_size = min(random.randint(3, 5), remaining)
             
-            # 隨機模擬讓其中一部分人成為同行好友 (賦予相同的 group_id)
-            batch_group_id = f"g_{int(time.time())}"
-            is_companion_batch = random.choice([True, False])
-            
-            for i in range(batch_size):
+            for _ in range(batch_size):
                 ln = random.choice(last_names)
                 tit = random.choice(["爺爺", "奶奶"])
                 age = random.choice([60, 70, 80, 90])
-                
-                # 如果是同行批次，前兩位長輩給予相同的目標器材，營造結伴需求
-                if is_companion_batch and i < 2 and batch_size >= 2:
-                    eqs = ["坐推"] # 讓他們想做同一個有機台數的器材
-                else:
-                    eqs = random.sample(equips_base, random.randint(1, 3))
+                eqs = random.sample(equips_base, random.randint(1, 3))
                 
                 p_id = get_or_create_patient_id(ln, tit, age)
-                g_id = batch_group_id if (is_companion_batch and i < 2 and batch_size >= 2) else None
-                add_patient(p_id, ln, tit, age, eqs, group_id=g_id)
+                add_patient(p_id, ln, tit, age, eqs, group_id=None) # 模擬預設為無同行組別
                 st.session_state.total_mock_count += 1
             
             st.rerun()
@@ -217,6 +208,7 @@ with st.sidebar:
         st.session_state.start_system_timestamp = time.time()
         st.session_state.form_status = {"type": None, "msg": None}
         st.session_state.input_last_name = ""
+        st.session_state.input_group_id = ""
         st.session_state.input_equips = []
         st.session_state.form_version += 1
         st.rerun()
@@ -239,19 +231,23 @@ m3.metric("換場休息中(3分/人)", f"{len(st.session_state.cooldown_patients
 
 with st.expander("➕ 長輩報到與處方登記", expanded=True):
     with st.form(key="patient_input_form"):
-        col1, col2, col3 = st.columns([1,1,1])
+        col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
         with col1:
             input_ln = st.text_input("姓氏", value=st.session_state.input_last_name, placeholder="例如：王", key=f"ln_widget_{st.session_state.form_version}")
         with col2:
             input_tit = st.selectbox("稱謂", ["爺爺", "奶奶"], key=f"tit_widget_{st.session_state.form_version}")
         with col3:
             input_age = st.selectbox("年齡層", [60, 70, 80, 90], format_func=lambda x:f"{x}歲", key=f"age_widget_{st.session_state.form_version}")
+        with col4:
+            # 手動輸入同行代碼欄位 (選填)
+            input_gid = st.text_input("同行組別 (選填)", value=st.session_state.input_group_id, placeholder="例如：朋友A", key=f"gid_widget_{st.session_state.form_version}")
         
         input_equips = st.multiselect("復健處方器材 (可多選)", ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"], default=st.session_state.input_equips, key=f"eqs_widget_{st.session_state.form_version}")
         submit_button = st.form_submit_button(label="進入排隊等待")
         
         if submit_button:
             st.session_state.input_last_name = input_ln.strip()
+            st.session_state.input_group_id = input_gid.strip()
             st.session_state.input_equips = input_equips
             
             missing_fields = []
@@ -285,16 +281,20 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
                 
                 if invalid_equips_msg:
                     st.session_state.input_last_name = ""
+                    st.session_state.input_group_id = ""
                     st.session_state.input_equips = []
                     st.session_state.form_version += 1
                     st.session_state.form_status = {
                         "type": "warning",
-                        "msg": f"❌ 登記失敗！重複排隊：{ '、'.join(invalid_equips_msg) }。"
+                        "msg": f"❌ 登記失敗！重複排隊：{ '、'.join(invalid_equips_msg)}。"
                     }
                     st.rerun()
                 else:
-                    add_patient(p_id, input_ln.strip(), input_tit, input_age, valid_to_add)
+                    # 如果有填寫同行組別，就代入該字串，沒填則為 None
+                    final_gid = input_gid.strip() if input_gid.strip() else None
+                    add_patient(p_id, input_ln.strip(), input_tit, input_age, valid_to_add, group_id=final_gid)
                     st.session_state.input_last_name = ""
+                    st.session_state.input_group_id = ""
                     st.session_state.input_equips = []
                     st.session_state.form_version += 1
                     st.session_state.form_status = {
@@ -358,19 +358,14 @@ if st.session_state.waiting_queue:
         available_eqs = [eq for eq, status in st.session_state.equipment_status.items() 
                         if status is None and eq.startswith(target_base)]
         
-        # 友善人性化調整：若該長輩有同行群組(group_id)，且目標器材有兩個以上空位，檢查同伴是否也在佇列中且符合條件
         assigned = False
         if available_eqs and p["id"] not in busy_ids and not is_cd:
-            # 檢查是否有同行夥伴
             group_id = p.get("group_id")
             if group_id:
-                # 尋找同一群組且目標相同的其他排隊者
                 companions = [comp for comp in st.session_state.waiting_queue 
                               if comp.get("group_id") == group_id and comp["target_equip"] == target_base and comp["id"] not in busy_ids and comp["id"] not in st.session_state.cooldown_patients]
                 
-                # 如果空機數量足夠容納整個群組（包含當前這一位）
                 if len(available_eqs) >= len(companions):
-                    # 同時分派給這群夥伴，讓他們一起開始
                     for comp in companions:
                         comp_avail_eqs = [eq for eq, status in st.session_state.equipment_status.items() if status is None and eq.startswith(target_base)]
                         if comp_avail_eqs:
@@ -381,7 +376,6 @@ if st.session_state.waiting_queue:
                     assigned = True
                     need_trigger_rerun = True
             
-            # 若無群組或無法成行，則進行一般單人分派
             if not assigned:
                 eq = available_eqs[0]
                 p["start_time"] = now
@@ -391,7 +385,6 @@ if st.session_state.waiting_queue:
         else:
             rem_waiting.append(p)
             
-    # 過濾掉已經在本次迴圈被分派出去的人
     st.session_state.waiting_queue = [p for p in rem_waiting if p["id"] not in busy_ids]
 
 if need_trigger_rerun:
@@ -415,7 +408,7 @@ with left_col:
                 "姓名": p["name"],
                 "年齡": f"{p['age']}歲",
                 "目標器材": p["target_equip"],
-                "同行組別": p.get("group_id", "-"),
+                "同行組別": p.get("group_id") if p.get("group_id") else "-",
                 "等待時間": f"{wait_seconds}秒",
                 "優先權分數(HRRN)": round(p.get("hrrn_score", 0), 4)
             })
