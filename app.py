@@ -127,7 +127,7 @@ if "cooldown_patients" not in st.session_state: st.session_state.cooldown_patien
 if "patient_id_counter" not in st.session_state: st.session_state.patient_id_counter = 1
 if "patient_registry" not in st.session_state: st.session_state.patient_registry = {}
 if "patient_history" not in st.session_state: st.session_state.patient_history = {}
-if "patient_groups" not in st.session_state: st.session_state.patient_groups = {} # 記錄互相牽連的組別成員
+if "patient_groups" not in st.session_state: st.session_state.patient_groups = {} 
 
 if "input_last_name" not in st.session_state: st.session_state.input_last_name = ""
 if "input_companion_id" not in st.session_state: st.session_state.input_companion_id = "" 
@@ -165,7 +165,7 @@ def add_patient(p_id, last_name, title, age, selected_equips, group_id=None):
         })
 
 # ==========================================
-# 5. 側邊欄模擬與控制 (分批注入隨機單人、2人同行或3人同行)
+# 5. 側邊欄模擬與控制 (各成員隨機獨立處方)
 # ==========================================
 with st.sidebar:
     st.header("👥 模擬情境")
@@ -174,6 +174,8 @@ with st.sidebar:
     if st.button("🚀 分批注入 (自動隨機單人/多人同行)"):
         if st.session_state.total_mock_count < 20:
             last_names = ["王", "陳", "林", "張", "李", "吳", "劉", "蔡", "楊", "黃", "曾", "洪", "郭", "馬", "徐"]
+            ages_base = [60, 70, 80, 90]
+            titles_base = ["爺爺", "奶奶"]
             equips_base = ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]
             
             remaining = 20 - st.session_state.total_mock_count
@@ -182,45 +184,60 @@ with st.sidebar:
             
             if batch_size == 1:
                 ln = random.choice(last_names)
-                tit = random.choice(["爺爺", "奶奶"])
-                age = random.choice([60, 70, 80, 90])
-                eqs = random.sample(equips_base, random.randint(1, 2))
+                tit = random.choice(titles_base)
+                age = random.choice(ages_base)
+                eqs = random.sample(equips_base, random.randint(1, 3)) # 隨機 1~3 項
                 
                 p_id = get_or_create_patient_id(ln, tit, age)
                 add_patient(p_id, ln, tit, age, eqs, group_id=None)
                 st.session_state.total_mock_count += 1
             
             elif batch_size == 2:
-                eqs = [random.choice(equips_base)]
-                
+                # 第一人
                 ln1 = random.choice(last_names)
-                p1_id = get_or_create_patient_id(ln1, "爺爺", 70)
-                add_patient(p1_id, ln1, "爺爺", 70, eqs, group_id=None)
+                tit1 = random.choice(titles_base)
+                age1 = random.choice(ages_base)
+                eqs1 = random.sample(equips_base, random.randint(1, 3))
+                p1_id = get_or_create_patient_id(ln1, tit1, age1)
+                add_patient(p1_id, ln1, tit1, age1, eqs1, group_id=None)
                 
+                # 第二人 (同行，但處方完全獨立隨機)
                 ln2 = random.choice(last_names)
-                p2_id = get_or_create_patient_id(ln2, "奶奶", 72)
-                add_patient(p2_id, ln2, "奶奶", 72, eqs, group_id=p1_id)
+                tit2 = random.choice(titles_base)
+                age2 = random.choice(ages_base)
+                eqs2 = random.sample(equips_base, random.randint(1, 3))
+                p2_id = get_or_create_patient_id(ln2, tit2, age2)
+                add_patient(p2_id, ln2, tit2, age2, eqs2, group_id=p1_id)
                 
-                # 雙向群組記錄
                 st.session_state.patient_groups[p1_id] = {p1_id, p2_id}
                 st.session_state.patient_groups[p2_id] = {p1_id, p2_id}
                 
                 st.session_state.total_mock_count += 2
                 
             elif batch_size >= 3:
-                eqs = [random.choice(equips_base)]
-                
+                # 第一人
                 ln1 = random.choice(last_names)
-                p1_id = get_or_create_patient_id(ln1, "爺爺", 65)
-                add_patient(p1_id, ln1, "爺爺", 65, eqs, group_id=None)
+                tit1 = random.choice(titles_base)
+                age1 = random.choice(ages_base)
+                eqs1 = random.sample(equips_base, random.randint(1, 3))
+                p1_id = get_or_create_patient_id(ln1, tit1, age1)
+                add_patient(p1_id, ln1, tit1, age1, eqs1, group_id=None)
                 
+                # 第二人 (同行，獨立處方)
                 ln2 = random.choice(last_names)
-                p2_id = get_or_create_patient_id(ln2, "奶奶", 68)
-                add_patient(p2_id, ln2, "奶奶", 68, eqs, group_id=p1_id)
+                tit2 = random.choice(titles_base)
+                age2 = random.choice(ages_base)
+                eqs2 = random.sample(equips_base, random.randint(1, 3))
+                p2_id = get_or_create_patient_id(ln2, tit2, age2)
+                add_patient(p2_id, ln2, tit2, age2, eqs2, group_id=p1_id)
                 
+                # 第三人 (同行，獨立處方)
                 ln3 = random.choice(last_names)
-                p3_id = get_or_create_patient_id(ln3, "爺爺", 70)
-                add_patient(p3_id, ln3, "爺爺", 70, eqs, group_id=p1_id)
+                tit3 = random.choice(titles_base)
+                age3 = random.choice(ages_base)
+                eqs3 = random.sample(equips_base, random.randint(1, 3))
+                p3_id = get_or_create_patient_id(ln3, tit3, age3)
+                add_patient(p3_id, ln3, tit3, age3, eqs3, group_id=p1_id)
                 
                 group_set = {p1_id, p2_id, p3_id}
                 st.session_state.patient_groups[p1_id] = group_set
@@ -281,7 +298,7 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
         with col4:
             input_comp_id = st.text_input("同行者編號 (選填)", value=st.session_state.input_companion_id, placeholder="例如：1", key=f"comp_widget_{st.session_state.form_version}")
         
-        input_equips = st.multiselect("復健處方器材 (可多選)", ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"], default=st.session_state.input_equips, key=f"eqs_widget_{st.session_state.form_version}")
+        input_equips = st.multiselect("復健處方器材 (可多選 1~3 項)", ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"], default=st.session_state.input_equips, key=f"eqs_widget_{st.session_state.form_version}")
         submit_button = st.form_submit_button(label="進入排隊等待")
         
         if submit_button:
@@ -317,7 +334,6 @@ with st.expander("➕ 長輩報到與處方登記", expanded=True):
                                     final_group_id = q_item["group_id"]
                                     break
                             
-                            # 建立雙向群組對應
                             if target_comp_id not in st.session_state.patient_groups:
                                 st.session_state.patient_groups[target_comp_id] = {target_comp_id}
                             st.session_state.patient_groups[target_comp_id].add(p_id)
@@ -480,7 +496,6 @@ with left_col:
             wait_seconds = int(now - p["arrival_time"])
             id_str = f"#{p['id']:03d}"
             
-            # 讓同組所有人（包含最前面先報到的人）互相顯示其他同伴的編號
             p_id = p["id"]
             if p_id in st.session_state.patient_groups:
                 group_members = st.session_state.patient_groups[p_id]
