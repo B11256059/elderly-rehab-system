@@ -427,10 +427,10 @@ with left_col:
             if p_id in st.session_state.patient_groups:
                 group_members = st.session_state.patient_groups[p_id]
                 other_members = [f"#{m:03d}" for m in group_members if m != p_id]
-                # 若沒有其他同行成員，則顯示空字串 "" 而不是符號
+                # 有其他同行成員才顯示，沒有則顯示空白
                 group_str = ", ".join(other_members) if other_members else ""
             else:
-                # 若沒有群組編號，則顯示空字串 ""
+                # 單獨一人或沒有群組時顯示空白
                 group_str = f"#{p['group_id']:03d}" if p.get("group_id") else ""
             
             display_data.append({
