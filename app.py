@@ -136,7 +136,7 @@ if "form_version" not in st.session_state: st.session_state.form_version = 0
 if "form_status" not in st.session_state: st.session_state.form_status = {"type": None, "msg": None}
 
 TRANSIT_COOLDOWN_SECONDS = 180 
-MID_PAUSE_SECONDS = 60         
+MID_PAUSE_SECONDS = 60        
 
 # ==========================================
 # 4. 功能函數
@@ -579,7 +579,7 @@ with right_col:
                             """, unsafe_allow_html=True)
                         else:
                             net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
-                            overtime_text = f" (已超時)" if net_active_sec > set_time else ""
+                            overtime_text = ""  # 已移除超時提示文字
                             
                             st.markdown(f"""
                             <div class="status-card">
