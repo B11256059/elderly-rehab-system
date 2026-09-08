@@ -579,7 +579,6 @@ with right_col:
                             """, unsafe_allow_html=True)
                         else:
                             net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
-                            overtime_text = f" (已超時)" if net_active_sec > set_time else ""
                             
                             st.markdown(f"""
                             <div class="status-card">
@@ -599,7 +598,7 @@ with right_col:
                                 p["pause_start_time"] = 0
                                 st.rerun()
                         else:
-                            if c1.button(f"⏸️ 中斷休息 (1分)", key=f"s_{eq}__btn"):
+                            if c1.button(f"⏸️ 中斷休息", key=f"s_{eq}__btn"):
                                 p["is_paused"] = True
                                 p["pause_start_time"] = time.time()
                                 st.rerun()
