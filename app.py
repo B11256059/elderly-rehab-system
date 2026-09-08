@@ -327,6 +327,7 @@ for eq, p in list(st.session_state.equipment_status.items()):
                 p["total_paused_duration"] += MID_PAUSE_SECONDS
                 p["is_paused"] = False
                 p["pause_start_time"] = 0
+                need_trigger_rerun = True
             else:
                 continue
 
@@ -341,6 +342,12 @@ for eq, p in list(st.session_state.equipment_status.items()):
                 p["total_paused_duration"] = 0
                 p["prompted_set"] = p["current_set"] - 1
                 need_trigger_rerun = True
+            else:
+                need_trigger_rerun = True  # 休息倒數中需要每秒重新整理
+            continue
+
+        # 如果正在彈出「是否完成」的視窗，暫停自動檢查，等待使用者按按鈕
+        if p.get("show_target_reached_modal", False):
             continue
 
         net_active_seconds = now - p["start_time"] - p.get("total_paused_duration", 0)
@@ -356,9 +363,9 @@ for eq, p in list(st.session_state.equipment_status.items()):
         if net_active_seconds >= set_time and p["current_set"] > p["prompted_set"]:
             p["show_target_reached_modal"] = True
             need_trigger_rerun = True
-
-else:
-    pass
+        else:
+            # 正常訓練中，每秒需要重新整理來看秒數跳動
+            need_trigger_rerun = True
 
 if st.session_state.waiting_queue:
     busy_ids = {p["id"] for p in st.session_state.equipment_status.values() if p}
@@ -422,9 +429,7 @@ if st.session_state.waiting_queue:
             rem_waiting.append(p)
             
     st.session_state.waiting_queue = [p for p in rem_waiting if p["id"] not in busy_ids]
-
-if need_trigger_rerun:
-    st.rerun()
+    need_trigger_rerun = True
 
 # ==========================================
 # 7. 前端雙欄看板呈現
@@ -529,7 +534,7 @@ with right_col:
                             p["prompted_set"] = p["current_set"] - 1
                             st.rerun()
 
-                    # 狀態 B: 剛好達到預定時間，彈出詢問畫面
+                    # 狀態 B: 達到設定時間，跳出彈窗
                     elif show_modal:
                         net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
                         st.markdown(f"""
@@ -557,9 +562,8 @@ with right_col:
                             st.rerun()
                             
                         if c2.button(f"❌ 尚未完成 (繼續訓練)", key=f"conf_not_yet_{eq}"):
-                            # 關閉彈窗，標記已詢問過，秒數繼續從 60 往上跑
                             p["show_target_reached_modal"] = False
-                            p["prompted_set"] = p["current_set"]
+                            p["prompted_set"] = p["current_set"]  # 標記這組已經問過了，不會重複跳出
                             st.rerun()
 
                     # 狀態 C: 正常訓練中（包含點擊「尚未完成」後，時間繼續往上增加）
@@ -599,9 +603,10 @@ with right_col:
                                 p["is_paused"] = True
                                 p["pause_start_time"] = time.time()
                                 st.rerun()
-                            # 讓長輩隨時可按的「已完成此組」按鈕
+                            # 隨時可以按的「已完成此組」按鈕
                             if c2.button(f"✅ 已完成此組", key=f"force_done_set_{eq}"):
                                 p["prompted_set"] = p["current_set"]
+                                p["show_target_reached_modal"] = False
                                 if p["current_set"] >= sets:
                                     if p["id"] not in st.session_state.patient_history:
                                         st.session_state.patient_history[p["id"]] = set()
@@ -615,6 +620,7 @@ with right_col:
             else:
                 st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8; padding: 25px;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
 
+# 安全控制的自動刷新（只有當畫面上有活動中的項目時才執行，避免死循環）
 has_active = len(st.session_state.waiting_queue) > 0 or any(p is not None for p in st.session_state.equipment_status.values()) or len(st.session_state.cooldown_patients) > 0
 
 if has_active:
