@@ -161,7 +161,6 @@ def add_patient(p_id, last_name, title, age, selected_equips, group_id=None):
             "prescription_detail": pres_info,
             "is_paused": False,      
             "pause_start_time": 0,      
-            "total_paused_duration": 0,  
             "group_id": group_id       
         })
 
@@ -324,12 +323,11 @@ for eq, p in list(st.session_state.equipment_status.items()):
     if p:
         if p.get("is_paused", False):
             if now - p["pause_start_time"] >= MID_PAUSE_SECONDS:
-                p["total_paused_duration"] += MID_PAUSE_SECONDS
                 p["is_paused"] = False
                 p["pause_start_time"] = 0
                 need_trigger_rerun = True
             else:
-                continue
+                need_trigger_rerun = True  # 休息倒數中也要持續重新整理讓時間跑
 
         # 如果正在組間休息
         if p.get("is_in_rest_period", False):
@@ -339,18 +337,18 @@ for eq, p in list(st.session_state.equipment_status.items()):
                 p["is_in_rest_period"] = False
                 p["current_set"] += 1
                 p["start_time"] = time.time()
-                p["total_paused_duration"] = 0
                 p["prompted_set"] = p["current_set"] - 1
                 need_trigger_rerun = True
             else:
-                need_trigger_rerun = True  # 休息倒數中需要每秒重新整理
+                need_trigger_rerun = True  
             continue
 
         # 如果正在彈出「是否完成」的視窗，暫停自動檢查，等待使用者按按鈕
         if p.get("show_target_reached_modal", False):
             continue
 
-        net_active_seconds = now - p["start_time"] - p.get("total_paused_duration", 0)
+        # 淨執行時間持續運作，不因中斷休息而停下
+        net_active_seconds = now - p["start_time"]
         
         pres = p["prescription_detail"]
         sets = pres["sets"]
@@ -364,7 +362,6 @@ for eq, p in list(st.session_state.equipment_status.items()):
             p["show_target_reached_modal"] = True
             need_trigger_rerun = True
         else:
-            # 正常訓練中，每秒需要重新整理來看秒數跳動
             need_trigger_rerun = True
 
 if st.session_state.waiting_queue:
@@ -530,7 +527,6 @@ with right_col:
                             p["is_in_rest_period"] = False
                             p["current_set"] += 1
                             p["start_time"] = time.time()
-                            p["total_paused_duration"] = 0
                             p["prompted_set"] = p["current_set"] - 1
                             st.rerun()
 
@@ -562,27 +558,25 @@ with right_col:
                             
                         if c2.button(f"❌ 尚未完成 (繼續訓練)", key=f"conf_not_yet_{eq}"):
                             p["show_target_reached_modal"] = False
-                            p["prompted_set"] = p["current_set"]  # 標記這組已經問過了，不會重複跳出
+                            p["prompted_set"] = p["current_set"] 
                             st.rerun()
 
-                    # 狀態 C: 正常訓練中（包含點擊「尚未完成」後，時間繼續往上增加）
+                    # 狀態 C: 正常訓練中 / 中斷休息中（時間持續往上增加）
                     else:
+                        net_active_sec = int(current_now - p["start_time"])
+                        
                         if is_currently_paused:
                             remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
-                            # 讀取中斷時被凍結的淨執行秒數
-                            display_active_sec = int(p.get("frozen_active_seconds", 0))
                             st.markdown(f"""
                             <div class="status-card paused">
                                 <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                                 👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
                                 🏋️ 正在執行: 第 {p['current_set']}/{sets} 組訓練<br>
-                                ⏱️ 淨執行時間: {display_active_sec}秒 / 單組預定: {set_time}秒<br>
+                                ⏱️ 淨執行時間: {net_active_sec}秒 / 單組預定: {set_time}秒<br>
                                 ⏱️ 中斷休息中 <span class="warning-text">(倒數: {remaining_pause}秒)</span>
                             </div>
                             """, unsafe_allow_html=True)
                         else:
-                            net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
-                            
                             st.markdown(f"""
                             <div class="status-card">
                                 <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
@@ -596,7 +590,6 @@ with right_col:
                         if is_currently_paused:
                             c1.button(f"⏳ 休息中", key=f"s_{eq}", disabled=True)
                             if c2.button(f"▶️ 跳過休息", key=f"f_{eq}__skip"):
-                                p["total_paused_duration"] += (time.time() - p["pause_start_time"])
                                 p["is_paused"] = False
                                 p["pause_start_time"] = 0
                                 st.rerun()
@@ -604,10 +597,7 @@ with right_col:
                             if c1.button(f"⏸️ 中斷休息", key=f"s_{eq}__btn"):
                                 p["is_paused"] = True
                                 p["pause_start_time"] = time.time()
-                                # 紀錄當前被凍結的淨執行時間
-                                p["frozen_active_seconds"] = int(time.time() - p["start_time"] - p.get("total_paused_duration", 0))
                                 st.rerun()
-                            # 隨時可以按的「已完成此組」按鈕
                             if c2.button(f"✅ 已完成此組", key=f"force_done_set_{eq}"):
                                 p["prompted_set"] = p["current_set"]
                                 p["show_target_reached_modal"] = False
@@ -624,7 +614,7 @@ with right_col:
             else:
                 st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8; padding: 25px;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
 
-# 安全控制的自動刷新（只有當畫面上有活動中的項目時才執行，避免死循環）
+# 安全控制的自動刷新
 has_active = len(st.session_state.waiting_queue) > 0 or any(p is not None for p in st.session_state.equipment_status.values()) or len(st.session_state.cooldown_patients) > 0
 
 if has_active:
