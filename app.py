@@ -19,14 +19,6 @@ st.markdown("""
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-left: 5px solid #10b981;
         margin-bottom: 20px;
     }
-    .status-card.paused {
-        border-left: 5px solid #eab308; 
-        background-color: #fefce8;
-    }
-    .status-card.auto-resting {
-        border-left: 5px solid #10b981; 
-        background-color: #f0fdf4;
-    }
     .waiting-row { font-size: 0.9em; padding: 10px; border-bottom: 1px solid #e2e8f0; }
     .highlight-text { color: #0e7490; font-weight: bold; }
     .warning-text { color: #b45309; font-weight: bold; }
@@ -327,7 +319,7 @@ for eq, p in list(st.session_state.equipment_status.items()):
                 p["pause_start_time"] = 0
                 need_trigger_rerun = True
             else:
-                need_trigger_rerun = True  # 休息倒數中也要持續重新整理讓時間跑
+                need_trigger_rerun = True
 
         # 如果正在組間休息
         if p.get("is_in_rest_period", False):
@@ -486,15 +478,11 @@ with right_col:
                         st.session_state.equipment_status[eq] = None
                         st.rerun()
                     
-                    bg_color = "#fee2e2" if wait_time > 60 else "#eff6ff"
-                    border_color = "#ef4444" if wait_time > 60 else "#3b82f6"
-                    status_text = f'⏳ 逾時自動釋放倒數: {int(90 - wait_time)}秒' if wait_time > 60 else '等待開始復健...'
-                    
                     st.markdown(f"""
-                    <div class="status-card" style="background-color: {bg_color}; border-left: 5px solid {border_color};">
-                        <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
+                    <div class="status-card">
+                        <b>⚙️ {eq}</b><br>
                         👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                        狀態: <span style="color:{'#b91c1c' if wait_time > 60 else '#1d4ed8'}; font-weight:bold;">{status_text}</span>
+                        狀態: 等待開始復健... (逾時自動釋放: {int(90 - wait_time)}秒)
                     </div>
                     """, unsafe_allow_html=True)
                     
@@ -516,10 +504,10 @@ with right_col:
                         rest_elapsed = int(current_now - p["rest_start_time"])
                         rem_rest = max(0, rest_time - rest_elapsed)
                         st.markdown(f"""
-                        <div class="status-card" style="background-color: #f0fdf4; border-left: 5px solid #22c55e;">
-                            <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
+                        <div class="status-card" style="border-left: 5px solid #3b82f6;">
+                            <b>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            🔄 <span style="color:#15803d; font-weight:bold;">組間休息中</span> (剩餘: {rem_rest} 秒)
+                            🔄 組間休息中 (剩餘: {rem_rest} 秒)
                         </div>
                         """, unsafe_allow_html=True)
                         
@@ -533,11 +521,10 @@ with right_col:
                     # 狀態 B: 達到設定時間，跳出彈窗
                     elif show_modal:
                         st.markdown(f"""
-                        <div class="status-card" style="background-color: #fef3c7; border-left: 5px solid #d97706;">
-                            <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
+                        <div class="status-card" style="border-left: 5px solid #f59e0b;">
+                            <b>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            ⚠️ <span style="color:#b45309; font-weight:bold;">第 {p['current_set']} 組已達預定時間！</span><br>
-                            請問本組是否已完成？
+                            ⚠️ <span class="warning-text">第 {p['current_set']} 組已達預定時間！</span> 請問本組是否已完成？
                         </div>
                         """, unsafe_allow_html=True)
                         
@@ -568,8 +555,8 @@ with right_col:
                         if is_currently_paused:
                             remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
                             st.markdown(f"""
-                            <div class="status-card paused">
-                                <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
+                            <div class="status-card" style="border-left: 5px solid #eab308;">
+                                <b>⚙️ {eq}</b><br>
                                 👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
                                 🏋️ 正在執行: 第 {p['current_set']}/{sets} 組訓練<br>
                                 ⏱️ 淨執行時間: {net_active_sec}秒 / 單組預定: {set_time}秒<br>
@@ -579,7 +566,7 @@ with right_col:
                         else:
                             st.markdown(f"""
                             <div class="status-card">
-                                <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
+                                <b>⚙️ {eq}</b><br>
                                 👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
                                 🏋️ 正在執行: 第 {p['current_set']}/{sets} 組訓練<br>
                                 ⏱️ 淨執行時間: {net_active_sec}秒 / 單組預定: {set_time}秒
