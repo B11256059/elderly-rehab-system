@@ -405,7 +405,7 @@ if st.session_state.waiting_queue:
                         comp_avail_eqs = [eq for eq, status in st.session_state.equipment_status.items() if status is None and eq.startswith(target_base)]
                         if comp_avail_eqs:
                             eq_to_assign = comp_avail_eqs[0]
-                            comp["start_time"] = now
+                            comp["start_time"] = time.time()
                             comp["show_target_reached_modal"] = False
                             comp["current_set"] = 1
                             comp["prompted_set"] = 0
@@ -417,7 +417,7 @@ if st.session_state.waiting_queue:
             
             if not assigned:
                 eq = available_eqs[0]
-                p["start_time"] = now
+                p["start_time"] = time.time()
                 p["show_target_reached_modal"] = False
                 p["current_set"] = 1
                 p["prompted_set"] = 0
@@ -536,7 +536,6 @@ with right_col:
 
                     # 狀態 B: 達到設定時間，跳出彈窗
                     elif show_modal:
-                        net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
                         st.markdown(f"""
                         <div class="status-card" style="background-color: #fef3c7; border-left: 5px solid #d97706;">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
@@ -570,23 +569,26 @@ with right_col:
                     else:
                         if is_currently_paused:
                             remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
+                            # 讀取中斷時被凍結的淨執行秒數
+                            display_active_sec = int(p.get("frozen_active_seconds", 0))
                             st.markdown(f"""
                             <div class="status-card paused">
                                 <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                                 👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
+                                🏋️ 正在執行: 第 {p['current_set']}/{sets} 組訓練<br>
+                                ⏱️ 淨執行時間: {display_active_sec}秒 / 單組預定: {set_time}秒<br>
                                 ⏱️ 中斷休息中 <span class="warning-text">(倒數: {remaining_pause}秒)</span>
                             </div>
                             """, unsafe_allow_html=True)
                         else:
                             net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
-                            overtime_text = ""  # 已移除超時提示文字
                             
                             st.markdown(f"""
                             <div class="status-card">
                                 <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                                 👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
                                 🏋️ 正在執行: 第 {p['current_set']}/{sets} 組訓練<br>
-                                ⏱️ 淨執行時間: {net_active_sec}秒 / 單組預定: {set_time}秒{overtime_text}
+                                ⏱️ 淨執行時間: {net_active_sec}秒 / 單組預定: {set_time}秒
                             </div>
                             """, unsafe_allow_html=True)
                         
@@ -602,6 +604,8 @@ with right_col:
                             if c1.button(f"⏸️ 中斷休息", key=f"s_{eq}__btn"):
                                 p["is_paused"] = True
                                 p["pause_start_time"] = time.time()
+                                # 紀錄當前被凍結的淨執行時間
+                                p["frozen_active_seconds"] = int(time.time() - p["start_time"] - p.get("total_paused_duration", 0))
                                 st.rerun()
                             # 隨時可以按的「已完成此組」按鈕
                             if c2.button(f"✅ 已完成此組", key=f"force_done_set_{eq}"):
