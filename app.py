@@ -330,6 +330,10 @@ for eq, p in list(st.session_state.equipment_status.items()):
             else:
                 continue
 
+        # 若目前正卡在「等待確認完成本組」的狀態，則暫停計時推進，直到按下按鈕
+        if p.get("is_waiting_for_confirmation", False):
+            continue
+
         net_active_seconds = now - p["start_time"] - p.get("total_paused_duration", 0)
         
         pres = p["prescription_detail"]
@@ -337,18 +341,38 @@ for eq, p in list(st.session_state.equipment_status.items()):
         set_time = pres["set_time"]
         rest_time = pres["rest_time"]
         
-        if sets <= 1:
-            total_required_seconds = set_time
-        else:
-            total_required_seconds = (set_time * sets) + (rest_time * (sets - 1))
+        # 計算目前應該在哪一組、累積時間是否超過當前組的單組時間
+        if sets > 1:
+            cycle_time = set_time + rest_time
+            current_cycle_pos = net_active_seconds % cycle_time
+            current_set_num = min(sets, (net_active_seconds // cycle_time) + 1)
             
-        if net_active_seconds >= total_required_seconds:
-            if p["id"] not in st.session_state.patient_history:
-                st.session_state.patient_history[p["id"]] = set()
-            st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
-            st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
-            st.session_state.equipment_status[eq] = None
-            need_trigger_rerun = True
+            # 如果這組的時間到了，但還沒進入休息，且還沒被標記等待確認 -> 進入確認狀態
+            if current_cycle_pos >= set_time and not p.get("is_auto_resting", False):
+                # 檢查是不是剛好完成最後一組
+                if current_set_num >= sets:
+                    # 最後一組時間到，直接完成該器材療程
+                    if p["id"] not in st.session_state.patient_history:
+                        st.session_state.patient_history[p["id"]] = set()
+                    st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
+                    st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
+                    st.session_state.equipment_status[eq] = None
+                    need_trigger_rerun = True
+                else:
+                    # 非最後一組，時間到後暫停，等待確認按鈕
+                    p["is_waiting_for_confirmation"] = True
+                    p["pending_set_num"] = current_set_num
+                    need_trigger_rerun = True
+        else:
+            # 單組處方，時間到直接完成
+            total_required_seconds = set_time
+            if net_active_seconds >= total_required_seconds:
+                if p["id"] not in st.session_state.patient_history:
+                    st.session_state.patient_history[p["id"]] = set()
+                st.session_state.patient_history[p["id"]].add(eq.split('_')[0])
+                st.session_state.cooldown_patients[p["id"]] = time.time() + TRANSIT_COOLDOWN_SECONDS
+                st.session_state.equipment_status[eq] = None
+                need_trigger_rerun = True
 
 if st.session_state.waiting_queue:
     busy_ids = {p["id"] for p in st.session_state.equipment_status.values() if p}
@@ -378,10 +402,10 @@ if st.session_state.waiting_queue:
             group_id = p.get("group_id")
             if group_id:
                 companions = [comp for comp in st.session_state.waiting_queue 
-                              if (comp.get("group_id") == group_id or comp["id"] == group_id) 
-                              and comp["target_equip"] == target_base 
-                              and comp["id"] not in busy_ids 
-                              and comp["id"] not in st.session_state.cooldown_patients]
+                            if (comp.get("group_id") == group_id or comp["id"] == group_id) 
+                            and comp["target_equip"] == target_base 
+                            and comp["id"] not in busy_ids 
+                            and comp["id"] not in st.session_state.cooldown_patients]
                 
                 if len(available_eqs) >= len(companions):
                     for comp in companions:
@@ -389,6 +413,7 @@ if st.session_state.waiting_queue:
                         if comp_avail_eqs:
                             eq_to_assign = comp_avail_eqs[0]
                             comp["start_time"] = now
+                            comp["is_waiting_for_confirmation"] = False
                             st.session_state.equipment_status[eq_to_assign] = comp
                             busy_ids.add(comp["id"])
                     assigned = True
@@ -397,6 +422,7 @@ if st.session_state.waiting_queue:
             if not assigned:
                 eq = available_eqs[0]
                 p["start_time"] = now
+                p["is_waiting_for_confirmation"] = False
                 st.session_state.equipment_status[eq] = p
                 busy_ids.add(p["id"])
                 need_trigger_rerun = True
@@ -427,10 +453,8 @@ with left_col:
             if p_id in st.session_state.patient_groups:
                 group_members = st.session_state.patient_groups[p_id]
                 other_members = [f"#{m:03d}" for m in group_members if m != p_id]
-                # 有其他同行成員才顯示，沒有則顯示空白
                 group_str = ", ".join(other_members) if other_members else ""
             else:
-                # 單獨一人或沒有群組時顯示空白
                 group_str = f"#{p['group_id']:03d}" if p.get("group_id") else ""
             
             display_data.append({
@@ -453,6 +477,7 @@ with right_col:
             if p:
                 current_now = time.time()
                 is_currently_paused = p.get("is_paused", False)
+                is_waiting_confirm = p.get("is_waiting_for_confirmation", False)
                 
                 if not p.get("is_started", False):
                     if "assigned_time" not in p: p["assigned_time"] = time.time()
@@ -478,6 +503,7 @@ with right_col:
                     if st.button(f"▶️ 開始復健", key=f"start_{eq}"):
                         p["is_started"] = True
                         p["start_time"] = time.time()
+                        p["is_waiting_for_confirmation"] = False
                         st.rerun()
                 
                 else:
@@ -487,19 +513,7 @@ with right_col:
                     set_time = pres["set_time"]
                     rest_time = pres["rest_time"]
                     
-                    is_auto_resting = False
-                    current_set_num = 1
-                    auto_rest_left = 0
-                    
-                    if sets > 1:
-                        cycle_time = set_time + rest_time
-                        current_cycle_pos = net_active_sec % cycle_time
-                        current_set_num = min(sets, (net_active_sec // cycle_time) + 1)
-                        
-                        if current_set_num < sets and current_cycle_pos >= set_time:
-                            is_auto_resting = True
-                            auto_rest_left = max(0, rest_time - (current_cycle_pos - set_time))
-                    
+                    # 畫面顯示狀態判斷
                     if is_currently_paused:
                         remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
                         st.markdown(f"""
@@ -509,21 +523,25 @@ with right_col:
                             ⏱️ 中斷休息中 <span class="warning-text">(倒數: {remaining_pause}秒)</span>
                         </div>
                         """, unsafe_allow_html=True)
-                    elif is_auto_resting:
+                    elif is_waiting_confirm:
+                        pending_set = p.get("pending_set_num", 1)
                         st.markdown(f"""
-                        <div class="status-card auto-resting">
+                        <div class="status-card" style="background-color: #fef3c7; border-left: 5px solid #d97706;">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            🔄 <span style="color:#2563eb; font-weight:bold;">組間休息中</span> (第 {current_set_num}/{sets} 組完成)<br>
-                            ⏳ 休息倒數: <span class="warning-text">{auto_rest_left} 秒</span> / 預計總處方: {p['service_time']}分鐘
+                            ⚠️ <span style="color:#b45309; font-weight:bold;">第 {pending_set} 組時間到！</span> 請確認是否已完成本組目標？
                         </div>
                         """, unsafe_allow_html=True)
                     else:
+                        # 計算目前進行到第幾組
+                        cycle_time = set_time + rest_time if sets > 1 else set_time
+                        current_set_num = min(sets, (net_active_sec // cycle_time) + 1) if sets > 1 else 1
+                        
                         st.markdown(f"""
                         <div class="status-card">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            🏋️ 正在執行: 第 {min(current_set_num, sets)}/{sets} 組訓練<br>
+                            🏋️ 正在執行: 第 {current_set_num}/{sets} 組訓練<br>
                             ⏱️ 淨執行時間: {net_active_sec//60}分{net_active_sec%60}秒 / 處方預計: {p['service_time']}分鐘
                         </div>
                         """, unsafe_allow_html=True)
@@ -537,8 +555,14 @@ with right_col:
                             p["is_paused"] = False
                             p["pause_start_time"] = 0
                             st.rerun()
-                    elif is_auto_resting:
-                        c1.button(f"🔄 組間休息中", key=f"s_{eq}_auto", disabled=True)
+                    elif is_waiting_confirm:
+                        if c1.button(f"✅ 確認完成本組", key=f"confirm_{eq}"):
+                            # 補上剛才完成的那組的時間，並解除等待確認，重新計時進入下一組或休息
+                            completed_set = p.get("pending_set_num", 1)
+                            # 強制推進 start_time 補平等待按鈕消耗的時間差
+                            p["start_time"] = time.time() - ((set_time * completed_set) + (rest_time * (completed_set - 1)))
+                            p["is_waiting_for_confirmation"] = False
+                            st.rerun()
                         if c2.button(f"🐇 已完成目標", key=f"f_{eq}__done"):
                             if p["id"] not in st.session_state.patient_history:
                                 st.session_state.patient_history[p["id"]] = set()
