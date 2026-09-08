@@ -482,11 +482,11 @@ with right_col:
                     <div class="status-card">
                         <b>⚙️ {eq}</b><br>
                         👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                        狀態: 等待開始復健... (逾時自動釋放: {int(90 - wait_time)}秒)
+                        狀態: 等待開始...
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    if st.button(f"▶️ 開始復健", key=f"start_{eq}"):
+                    if st.button(f"▶️ 開始", key=f"start_{eq}"):
                         p["is_started"] = True
                         p["start_time"] = time.time()
                         p["current_set"] = 1
@@ -499,37 +499,29 @@ with right_col:
                     set_time = pres["set_time"]
                     rest_time = pres["rest_time"]
                     
-                    # 狀態 A: 正在組間休息
-                    if is_in_rest:
+                    # 簡化狀態描述：只保留使用者與中斷休息等核心資訊
+                    status_str = "🏋️ 訓練中"
+                    if is_currently_paused:
+                        remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
+                        status_str = f"☕ 中斷休息中 (倒數: {remaining_pause}秒)"
+                    elif is_in_rest:
                         rest_elapsed = int(current_now - p["rest_start_time"])
                         rem_rest = max(0, rest_time - rest_elapsed)
-                        st.markdown(f"""
-                        <div class="status-card" style="border-left: 5px solid #3b82f6;">
-                            <b>⚙️ {eq}</b><br>
-                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            🔄 組間休息中 (剩餘: {rem_rest} 秒)
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        if st.button(f"▶️ 跳過休息，進行下一組", key=f"skip_rest_{eq}"):
-                            p["is_in_rest_period"] = False
-                            p["current_set"] += 1
-                            p["start_time"] = time.time()
-                            p["prompted_set"] = p["current_set"] - 1
-                            st.rerun()
-
-                    # 狀態 B: 達到設定時間，跳出彈窗
+                        status_str = f"🔄 組間休息中 (剩餘: {rem_rest}秒)"
                     elif show_modal:
-                        st.markdown(f"""
-                        <div class="status-card" style="border-left: 5px solid #f59e0b;">
-                            <b>⚙️ {eq}</b><br>
-                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            ⚠️ <span class="warning-text">第 {p['current_set']} 組已達預定時間！</span> 請問本組是否已完成？
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        c1, c2 = st.columns(2)
-                        if c1.button(f"✅ 已完成 (進入休息)", key=f"conf_done_{eq}"):
+                        status_str = f"⚠️ 第 {p['current_set']} 組已達預定時間"
+
+                    st.markdown(f"""
+                    <div class="status-card" style="border-left: 5px solid {'#eab308' if is_currently_paused else '#10b981'};">
+                        <b>⚙️ {eq}</b><br>
+                        👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
+                        狀態: {status_str}
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    c1, c2 = st.columns(2)
+                    if show_modal:
+                        if c1.button(f"✅ 完成", key=f"conf_done_{eq}"):
                             p["show_target_reached_modal"] = False
                             p["prompted_set"] = p["current_set"]
                             if p["current_set"] >= sets:
@@ -543,40 +535,22 @@ with right_col:
                                 p["rest_start_time"] = time.time()
                             st.rerun()
                             
-                        if c2.button(f"❌ 尚未完成 (繼續訓練)", key=f"conf_not_yet_{eq}"):
+                        if c2.button(f"❌ 繼續", key=f"conf_not_yet_{eq}"):
                             p["show_target_reached_modal"] = False
                             p["prompted_set"] = p["current_set"] 
                             st.rerun()
-
-                    # 狀態 C: 正常訓練中 / 中斷休息中（時間持續往上增加）
+                    elif is_in_rest:
+                        if c1.button(f"▶️ 跳過休息", key=f"skip_rest_{eq}"):
+                            p["is_in_rest_period"] = False
+                            p["current_set"] += 1
+                            p["start_time"] = time.time()
+                            p["prompted_set"] = p["current_set"] - 1
+                            st.rerun()
+                        c2.empty()
                     else:
-                        net_active_sec = int(current_now - p["start_time"])
-                        
-                        if is_currently_paused:
-                            remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
-                            st.markdown(f"""
-                            <div class="status-card" style="border-left: 5px solid #eab308;">
-                                <b>⚙️ {eq}</b><br>
-                                👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                                🏋️ 正在執行: 第 {p['current_set']}/{sets} 組訓練<br>
-                                ⏱️ 淨執行時間: {net_active_sec}秒 / 單組預定: {set_time}秒<br>
-                                ⏱️ 中斷休息中 <span class="warning-text">(倒數: {remaining_pause}秒)</span>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"""
-                            <div class="status-card">
-                                <b>⚙️ {eq}</b><br>
-                                👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                                🏋️ 正在執行: 第 {p['current_set']}/{sets} 組訓練<br>
-                                ⏱️ 淨執行時間: {net_active_sec}秒 / 單組預定: {set_time}秒
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        c1, c2 = st.columns(2)
                         if is_currently_paused:
                             c1.button(f"⏳ 休息中", key=f"s_{eq}", disabled=True)
-                            if c2.button(f"▶️ 跳過休息", key=f"f_{eq}__skip"):
+                            if c2.button(f"▶️ 恢復", key=f"f_{eq}__skip"):
                                 p["is_paused"] = False
                                 p["pause_start_time"] = 0
                                 st.rerun()
@@ -585,7 +559,7 @@ with right_col:
                                 p["is_paused"] = True
                                 p["pause_start_time"] = time.time()
                                 st.rerun()
-                            if c2.button(f"✅ 已完成此組", key=f"force_done_set_{eq}"):
+                            if c2.button(f"✅ 完成本組", key=f"force_done_set_{eq}"):
                                 p["prompted_set"] = p["current_set"]
                                 p["show_target_reached_modal"] = False
                                 if p["current_set"] >= sets:
