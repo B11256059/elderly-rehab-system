@@ -579,6 +579,7 @@ with right_col:
                             """, unsafe_allow_html=True)
                         else:
                             net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
+                            overtime_text = f" (已超時)" if net_active_sec > set_time else ""
                             
                             st.markdown(f"""
                             <div class="status-card">
