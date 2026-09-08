@@ -522,7 +522,7 @@ with right_col:
                         <div class="status-card" style="background-color: #f0fdf4; border-left: 5px solid #22c55e;">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            ☕ <span style="color:#15803d; font-weight:bold;">組間休息中</span> (剩餘: {rem_rest} 秒)
+                            🔄 <span style="color:#15803d; font-weight:bold;">組間休息中</span> (剩餘: {rem_rest} 秒)
                         </div>
                         """, unsafe_allow_html=True)
                         
@@ -541,7 +541,7 @@ with right_col:
                         <div class="status-card" style="background-color: #fef3c7; border-left: 5px solid #d97706;">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                             👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            ⚠️ <span style="color:#b45309; font-weight:bold;">第 {p['current_set']} 組已達預定時間 ({net_active_sec}秒)！</span><br>
+                            ⚠️ <span style="color:#b45309; font-weight:bold;">第 {p['current_set']} 組已達預定時間！</span><br>
                             請問本組是否已完成？
                         </div>
                         """, unsafe_allow_html=True)
@@ -579,7 +579,7 @@ with right_col:
                             """, unsafe_allow_html=True)
                         else:
                             net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
-                            overtime_text = f" (已超時 {net_active_sec - set_time}秒)" if net_active_sec > set_time else ""
+                            overtime_text = f" (已超時)" if net_active_sec > set_time else ""
                             
                             st.markdown(f"""
                             <div class="status-card">
