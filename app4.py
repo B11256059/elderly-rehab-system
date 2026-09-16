@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
+import random
 from datetime import datetime
 
 # ==========================================
@@ -21,10 +22,10 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🏥 智慧復健動態排程管理系統（擬真健保卡刷卡版）")
+st.title("🏥 智慧復健動態排程管理系統（隨機多項處方版）")
 
 # ==========================================
-# 2. 原始復健運動處方大表與 10 位長輩資料庫
+# 2. 原始復健運動處方大表與動態隨機長輩資料庫
 # ==========================================
 raw_data = [
     {"器材": "大轉輪", "年齡": 60, "組數": 5, "次數": 20, "組時間": 50, "休息時間": 60},
@@ -53,12 +54,6 @@ raw_data = [
     {"器材": "復健助行車", "年齡": 90, "組數": 8, "次數": "不適用", "組時間": 37, "休息時間": 90},
 ]
 
-def format_unit(value, unit):
-    val_str = str(value).strip()
-    if val_str == "" or val_str == "0": return f"- {unit}"
-    if unit in val_str or "不適用" in val_str: return val_str
-    return f"{val_str} {unit}"
-
 lookup_table = {}
 prescription_details = {}
 
@@ -75,21 +70,34 @@ for item in raw_data:
         "sets": sets, "set_time": set_time, "rest_time": rest_time
     }
 
-# 內建 10 位長輩資料庫（12位數模擬健保卡號，每人分配 3~5 項豐富復健器材處方）
-PATIENT_DATABASE = {
-    "1101 2203 4401": {"id": 1, "last_name": "王", "title": "爺爺", "age": 80, "equips": ["大轉輪", "坐推", "漫步機"]},
-    "1101 2203 4402": {"id": 2, "last_name": "陳", "title": "奶奶", "age": 70, "equips": ["坐推", "肩關節康復器", "復健助行車", "漫步機"]},
-    "1101 2203 4403": {"id": 3, "last_name": "林", "title": "爺爺", "age": 90, "equips": ["大轉輪", "肩關節康復器", "復健助行車", "坐推", "漫步機"]},
-    "1101 2203 4404": {"id": 4, "last_name": "張", "title": "奶奶", "age": 60, "equips": ["大轉輪", "坐推", "漫步機", "肩關節康復器"]},
-    "1101 2203 4405": {"id": 5, "last_name": "李", "title": "爺爺", "age": 80, "equips": ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]},
-    "1101 2203 4406": {"id": 6, "last_name": "吳", "title": "奶奶", "age": 70, "equips": ["漫步機", "肩關節康復器", "復健助行車", "大轉輪"]},
-    "1101 2203 4407": {"id": 7, "last_name": "劉", "title": "爺爺", "age": 90, "equips": ["坐推", "復健助行車", "大轉輪", "漫步機"]},
-    "1101 2203 4408": {"id": 8, "last_name": "蔡", "title": "奶奶", "age": 60, "equips": ["大轉輪", "肩關節康復器", "復健助行車", "坐推"]},
-    "1101 2203 4409": {"id": 9, "last_name": "楊", "title": "爺爺", "age": 80, "equips": ["坐推", "漫步機", "肩關節康復器", "復健助行車", "大轉輪"]},
-    "1101 2203 4410": {"id": 10, "last_name": "黃", "title": "奶奶", "age": 90, "equips": ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]}
-}
+# 初始化 10 位長輩隨機處方資料庫（確保分佈為：2人1項, 2人2項, 2人3項, 2人4項, 2人5項）
+if "PATIENT_DATABASE" not in st.session_state:
+    base_info = [
+        {"id": 1, "last_name": "王", "title": "爺爺", "age": 80},
+        {"id": 2, "last_name": "陳", "title": "奶奶", "age": 70},
+        {"id": 3, "last_name": "林", "title": "爺爺", "age": 90},
+        {"id": 4, "last_name": "張", "title": "奶奶", "age": 60},
+        {"id": 5, "last_name": "李", "title": "爺爺", "age": 80},
+        {"id": 6, "last_name": "吳", "title": "奶奶", "age": 70},
+        {"id": 7, "last_name": "劉", "title": "爺爺", "age": 90},
+        {"id": 8, "last_name": "蔡", "title": "奶奶", "age": 60},
+        {"id": 9, "last_name": "楊", "title": "爺爺", "age": 80},
+        {"id": 10, "last_name": "黃", "title": "奶奶", "age": 90}
+    ]
+    
+    item_counts = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
+    random.shuffle(item_counts)
+    all_equip_types = ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]
+    
+    db = {}
+    for i, info in enumerate(base_info):
+        card_key = f"1101 2203 44{i+1:02d}"
+        k = item_counts[i]
+        info["equips"] = random.sample(all_equip_types, k)
+        db[card_key] = info
+    st.session_state.PATIENT_DATABASE = db
 
-# 建立純數字對照，方便比對
+PATIENT_DATABASE = st.session_state.PATIENT_DATABASE
 NORMALIZED_DB = {k.replace(" ", ""): (k, v) for k, v in PATIENT_DATABASE.items()}
 
 # ==========================================
@@ -144,7 +152,7 @@ with st.sidebar:
     st.write("點擊下方按鈕模擬刷入 12 位數健保卡：")
     
     for c_id, info in PATIENT_DATABASE.items():
-        btn_label = f"💳 {c_id}\n({info['last_name']}{info['title']}, {info['age']}歲)"
+        btn_label = f"💳 {c_id}\n({info['last_name']}{info['title']}, {info['age']}歲, {len(info['equips'])}項)"
         if info["id"] in [p["id"] for p in st.session_state.waiting_queue] or info["id"] in st.session_state.cooldown_patients:
             btn_label += " [已報到]"
             
@@ -158,13 +166,37 @@ with st.sidebar:
                 st.warning("此長輩已經報到或正在排隊中！")
                 
     st.write("---")
-    if st.button("🧹 清空所有數據"):
+    if st.button("🧹 清空所有數據並重新洗牌"):
         st.session_state.waiting_queue = []
         st.session_state.equipment_status = {eq: None for eq in st.session_state.equipment_status.keys()}
         st.session_state.cooldown_patients = {}
         st.session_state.patient_history = {}
         st.session_state.scanned_cards = set()
         st.session_state.start_system_timestamp = time.time()
+        
+        # 重新隨機洗牌處方數量分佈
+        base_info = [
+            {"id": 1, "last_name": "王", "title": "爺爺", "age": 80},
+            {"id": 2, "last_name": "陳", "title": "奶奶", "age": 70},
+            {"id": 3, "last_name": "林", "title": "爺爺", "age": 90},
+            {"id": 4, "last_name": "張", "title": "奶奶", "age": 60},
+            {"id": 5, "last_name": "李", "title": "爺爺", "age": 80},
+            {"id": 6, "last_name": "吳", "title": "奶奶", "age": 70},
+            {"id": 7, "last_name": "劉", "title": "爺爺", "age": 90},
+            {"id": 8, "last_name": "蔡", "title": "奶奶", "age": 60},
+            {"id": 9, "last_name": "楊", "title": "爺爺", "age": 80},
+            {"id": 10, "last_name": "黃", "title": "奶奶", "age": 90}
+        ]
+        item_counts = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
+        random.shuffle(item_counts)
+        all_equip_types = ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]
+        db = {}
+        for i, info in enumerate(base_info):
+            card_key = f"1101 2203 44{i+1:02d}"
+            k = item_counts[i]
+            info["equips"] = random.sample(all_equip_types, k)
+            db[card_key] = info
+        st.session_state.PATIENT_DATABASE = db
         st.rerun()
 
 # ==========================================
@@ -193,7 +225,7 @@ with st.container():
             orig_key, p_info = NORMALIZED_DB[cleaned_card]
             if orig_key not in st.session_state.scanned_cards:
                 add_patient_by_card(cleaned_card)
-                st.success(f"✅ 辨識成功！歡迎 {p_info['last_name']}{p_info['title']} (#{p_info['id']:03d})，已自動帶入處方！")
+                st.success(f"✅ 辨識成功！歡迎 {p_info['last_name']}{p_info['title']} (#{p_info['id']:03d})，隨機帶入 {len(p_info['equips'])} 項處方！")
                 time.sleep(0.5)
                 st.rerun()
             else:
