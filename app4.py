@@ -70,7 +70,7 @@ for item in raw_data:
         "sets": sets, "set_time": set_time, "rest_time": rest_time
     }
 
-# 初始化 10 位長輩隨機處方資料庫（2人1項, 2人2項, 2人3項, 2人4項, 2人5項）
+# 初始化 10 位長輩隨機處方資料庫
 if "PATIENT_DATABASE" not in st.session_state:
     base_info = [
         {"id": 1, "last_name": "王", "title": "爺爺", "age": 80},
@@ -103,7 +103,7 @@ NORMALIZED_DB = {k.replace(" ", ""): (k, v) for k, v in PATIENT_DATABASE.items()
 # ==========================================
 # 3. 系統狀態初始化
 # ==========================================
-if "active_patients" not in st.session_state: st.session_state.active_patients = {}  # 記錄每位長輩目前正在進行或已完成的項目
+if "active_patients" not in st.session_state: st.session_state.active_patients = {}
 if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = []  
 if "equipment_status" not in st.session_state: 
     st.session_state.equipment_status = {
@@ -128,7 +128,6 @@ def add_patient_by_card(raw_card_key):
     orig_key, p_info = NORMALIZED_DB[raw_card_key]
     p_id = p_info["id"]
     
-    # 記錄這位長輩的所有處方與完成狀態
     st.session_state.active_patients[p_id] = {
         "info": p_info,
         "completed_equips": set(),
@@ -136,7 +135,6 @@ def add_patient_by_card(raw_card_key):
     }
     st.session_state.scanned_cards.add(orig_key)
     
-    # 立即為其所有處方建立排隊任務
     for equip in p_info["equips"]:
         pres_info = prescription_details.get((equip, p_info["age"]), {"sets": 3, "set_time": 30, "rest_time": 60})
         st.session_state.waiting_queue.append({
@@ -154,10 +152,10 @@ def add_patient_by_card(raw_card_key):
 # ==========================================
 with st.sidebar:
     st.header("📇 模擬刷健保卡區")
-    st.write("點擊下方按鈕模擬刷入 12 位數健保卡：")
+    st.write("點擊下方長輩按鈕模擬刷卡報到：")
     
     for c_id, info in PATIENT_DATABASE.items():
-        btn_label = f"💳 {c_id}\n({info['last_name']}{info['title']}, {info['age']}歲, {len(info['equips'])}項)"
+        btn_label = f"👤 {info['last_name']}{info['title']} ({info['age']}歲, {len(info['equips'])}項處方)"
         if info["id"] in st.session_state.active_patients or info["id"] in st.session_state.cooldown_patients:
             btn_label += " [已報到]"
             
@@ -165,10 +163,10 @@ with st.sidebar:
             norm_id = c_id.replace(" ", "")
             if c_id not in st.session_state.scanned_cards:
                 add_patient_by_card(norm_id)
-                st.success(f"識別成功：{info['last_name']}{info['title']} (#{info['id']:03d})，帶入 {len(info['equips'])} 項處方！")
+                st.success(f"✅ 辨識成功！{info['last_name']}{info['title']} 已完成報到並進入排程系統！")
                 st.rerun()
             else:
-                st.warning("此長輩已經報到或正在進行中！")
+                st.warning(f"⚠️ {info['last_name']}{info['title']} 已經報到或正在進行中！")
                 
     st.write("---")
     if st.button("🧹 清空所有數據並重新洗牌"):
@@ -222,19 +220,20 @@ m3.metric("換場休息中", f"{len(st.session_state.cooldown_patients)} 人")
 
 # 健保卡號手動/條碼槍輸入區
 with st.container():
-    st.info("💡 **櫃台刷卡區**：請使用條碼槍或手動輸入 12 位數健保卡號（例如：`1101 2203 4401` 或連續數字 `110122034401`）後按 Enter。")
-    card_input = st.text_input("健保卡號輸入框", placeholder="請輸入 12 位數健保卡號...", key="card_scanner_input")
+    st.info("💡 **櫃台刷卡區**：請使用條碼槍或輸入健保卡號後按 Enter。")
+    card_input = st.text_input("健保卡號輸入框", placeholder="請刷入健保卡...", key="card_scanner_input")
     if card_input:
         cleaned_card = card_input.strip().replace(" ", "").replace("-", "")
         if cleaned_card in NORMALIZED_DB:
             orig_key, p_info = NORMALIZED_DB[cleaned_card]
             if orig_key not in st.session_state.scanned_cards:
                 add_patient_by_card(cleaned_card)
-                st.success(f"✅ 辨識成功！歡迎 {p_info['last_name']}{p_info['title']} (#{p_info['id']:03d})，隨機帶入 {len(p_info['equips'])} 項處方！")
+                # 這裡改為乾淨、有人情味的提示文字，不顯示卡號
+                st.success(f"✅ 辨識成功！{p_info['last_name']}{p_info['title']} 已完成報到，共帶入 {len(p_info['equips'])} 項處方！")
                 time.sleep(0.5)
                 st.rerun()
             else:
-                st.warning(f"⚠️ 健保卡號 {orig_key} 已經報到或正在進行中！")
+                st.warning(f"⚠️ {p_info['last_name']}{p_info['title']} 已經報到或正在進行中！")
         else:
             st.error(f"❌ 找不到對應的健保卡號，請確認是否正確。")
 
@@ -285,7 +284,6 @@ for eq, p in list(st.session_state.equipment_status.items()):
             need_trigger_rerun = True
 
 if st.session_state.waiting_queue:
-    # 收集目前正在器材區運作或等待開始的人員 ID
     busy_ids = {p["id"] for p in st.session_state.equipment_status.values() if p}
     now = time.time()
     
@@ -308,8 +306,6 @@ if st.session_state.waiting_queue:
         is_cd = p["id"] in st.session_state.cooldown_patients
         available_eqs = [eq for eq, status in st.session_state.equipment_status.items() if status is None and eq.startswith(target_base)]
         
-        # 關鍵點：只有當該長輩「不在忙碌中（busy_ids）」、「不在換場冷卻中」、且「該器材有空位」時，才會被派去器材區！
-        # 否則，他會繼續留在 rem_waiting 裡面，顯示在現場排隊等待區！
         if available_eqs and p["id"] not in busy_ids and not is_cd:
             eq = available_eqs[0]
             p["start_time"] = now
@@ -339,10 +335,11 @@ with left_col:
         display_data = []
         for p in st.session_state.waiting_queue:
             wait_seconds = int(now - p["arrival_time"])
-            id_str = f"{p['name']} #{p['id']:03d}"
+            # 表格內的長輩名稱也不帶編號
+            id_str = f"{p['name']}"
             
             display_data.append({
-                "長輩編號": id_str,
+                "長輩姓名": id_str,
                 "年齡": f"{p['age']}歲",
                 "目標器材": p["target_equip"],
                 "等待時間": f"{wait_seconds}秒",
@@ -381,7 +378,7 @@ with right_col:
                     st.markdown(f"""
                     <div class="status-card" style="background-color: {bg_color}; border-left: 5px solid {border_color};">
                         <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                        👤 使用者: <span class="highlight-text">{p['name']} (#{p['id']:03d}, {p['age']}歲)</span><br>
+                        👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲)</span><br>
                         狀態: <span style="color:{'#b91c1c' if wait_time > 60 else '#1d4ed8'}; font-weight:bold;">{status_text}</span>
                     </div>
                     """, unsafe_allow_html=True)
@@ -405,7 +402,7 @@ with right_col:
                         st.markdown(f"""
                         <div class="status-card" style="background-color: #f0fdf4; border-left: 5px solid #22c55e;">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                            👤 使用者: <span class="highlight-text">{p['name']} (#{p['id']:03d}, {p['age']}歲)</span><br>
+                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲)</span><br>
                             🔄 <span style="color:#15803d; font-weight:bold;">組間休息中</span> (剩餘: {rem_rest} 秒)
                         </div>
                         """, unsafe_allow_html=True)
@@ -422,7 +419,7 @@ with right_col:
                         st.markdown(f"""
                         <div class="status-card" style="background-color: #fef3c7; border-left: 5px solid #d97706;">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                            👤 使用者: <span class="highlight-text">{p['name']} (#{p['id']:03d}, {p['age']}歲)</span><br>
+                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲)</span><br>
                             ⚠️ <span style="color:#b45309; font-weight:bold;">第 {p['current_set']} 組已達預定時間！</span>
                         </div>
                         """, unsafe_allow_html=True)
@@ -452,7 +449,7 @@ with right_col:
                         st.markdown(f"""
                         <div class="status-card">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                            👤 使用者: <span class="highlight-text">{p['name']} (#{p['id']:03d}, {p['age']}歲)</span><br>
+                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲)</span><br>
                             🏋️ 正在執行: 第 {p['current_set']}/{sets} 組訓練<br>
                             ⏱️ 淨執行時間: {net_active_sec}秒 / 單組預定: {set_time}秒
                         </div>
