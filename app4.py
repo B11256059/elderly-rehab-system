@@ -115,6 +115,7 @@ NORMALIZED_DB = {k.replace(" ", ""): (k, v) for k, v in PATIENT_DATABASE.items()
 # ==========================================
 if "active_patients" not in st.session_state: st.session_state.active_patients = {}
 if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = []  
+if "patient_groups" not in st.session_state: st.session_state.patient_groups = {} # <--- 加上這行就能解決 KeyError！
 if "equipment_status" not in st.session_state: 
     st.session_state.equipment_status = {
         "大轉輪_1": None, 
