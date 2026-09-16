@@ -35,38 +35,38 @@ st.markdown("""
 st.title("🏥 智慧復健動態排程管理系統")
 
 # ==========================================
-# 2. 原始復健運動處方大表與固定長輩資料庫
+# 2. 原始復健運動處方大表與固定長輩資料庫（保留文字說明）
 # ==========================================
 raw_data = [
     # 器材一: 大轉輪
-        {"器材": "大轉輪", "年齡": 60, "組數": 5, "次數": 20, "組時間": "50 (AI推估)", "休息時間": "60 (參考ACSM)"},
-        {"器材": "大轉輪", "年齡": 70, "組數": 4, "次數": 16, "組時間": "40 (AI推估)", "休息時間": "70 (參考ACSM)"},
-        {"器材": "大轉輪", "年齡": 80, "組數": 3, "次數": 13, "組時間": "35 (AI推估)", "休息時間": "80 (參考ACSM)"},
-        {"器材": "大轉輪", "年齡": 90, "組數": 3, "次數": 10, "組時間": "30 (AI推估)", "休息時間": "90 (參考ACSM)"},
-        
-        # 器材二: 坐推
-        {"器材": "坐推", "年齡": 60, "組數": 5, "次數": 12, "組時間": "36 (AI推估)", "休息時間": "60 (參考ACSM)"},
-        {"器材": "坐推", "年齡": 70, "組數": 5, "次數": 11, "組時間": "33 (AI推估)", "休息時間": "70 (參考ACSM)"},
-        {"器材": "坐推", "年齡": 80, "組數": 4, "次數": 10, "組時間": "30 (AI推估)", "休息時間": "80 (參考ACSM)"},
-        {"器材": "坐推", "年齡": 90, "組數": 3, "次數": 10, "組時間": "30 (AI推估)", "休息時間": "90 (參考ACSM)"},
-        
-        # 器材三: 漫步機
-        {"器材": "漫步機", "年齡": 60, "組數": 2, "次數": "不適用", "組時間": 450, "休息時間": "60 (參考ACSM)"},
-        {"器材": "漫步機", "年齡": 70, "組數": 2, "次數": "不適用", "組時間": 390, "休息時間": "70 (參考ACSM)"},
-        {"器材": "漫步機", "年齡": 80, "組數": 2, "次數": "不適用", "組時間": 330, "休息時間": "80 (參考ACSM)"},
-        {"器材": "漫步機", "年齡": 90, "組數": 2, "次數": "不適用", "組時間": 300, "休息時間": "90 (參考ACSM)"},
+    {"器材": "大轉輪", "年齡": 60, "組數": 5, "次數": 20, "組時間": "50 (AI推估)", "休息時間": "60 (參考ACSM)"},
+    {"器材": "大轉輪", "年齡": 70, "組數": 4, "次數": 16, "組時間": "40 (AI推估)", "休息時間": "70 (參考ACSM)"},
+    {"器材": "大轉輪", "年齡": 80, "組數": 3, "次數": 13, "組時間": "35 (AI推估)", "休息時間": "80 (參考ACSM)"},
+    {"器材": "大轉輪", "年齡": 90, "組數": 3, "次數": 10, "組時間": "30 (AI推估)", "休息時間": "90 (參考ACSM)"},
     
-        # 器材四: 肩關節康復器
-        {"器材": "肩關節康復器", "年齡": 60, "組數": 5, "次數": 20, "組時間": "45 (AI推估)", "休息時間": "60 (參考ACSM)"},
-        {"器材": "肩關節康復器", "年齡": 70, "組數": 4, "次數": 16, "組時間": "38 (AI推估)", "休息時間": "70 (參考ACSM)"},
-        {"器材": "肩關節康復器", "年齡": 80, "組數": 3, "次數": 13, "組時間": "32 (AI推估)", "休息時間": "80 (參考ACSM)"},
-        {"器材": "肩關節康復器", "年齡": 90, "組數": 3, "次數": 10, "組時間": "28 (AI推估)", "休息時間": "90 (參考ACSM)"},
+    # 器材二: 坐推
+    {"器材": "坐推", "年齡": 60, "組數": 5, "次數": 12, "組時間": "36 (AI推估)", "休息時間": "60 (參考ACSM)"},
+    {"器材": "坐推", "年齡": 70, "組數": 5, "次數": 11, "組時間": "33 (AI推估)", "休息時間": "70 (參考ACSM)"},
+    {"器材": "坐推", "年齡": 80, "組數": 4, "次數": 10, "組時間": "30 (AI推估)", "休息時間": "80 (參考ACSM)"},
+    {"器材": "坐推", "年齡": 90, "組數": 3, "次數": 10, "組時間": "30 (AI推估)", "休息時間": "90 (參考ACSM)"},
     
-        # 器材五: 復健助行車
-        {"器材": "復健助行車", "年齡": 60, "組數": 2, "次數": "不適用", "組時間": 300, "休息時間": "60 (參考ACSM)"},
-        {"器材": "復健助行車", "年齡": 70, "組數": 4, "次數": "不適用", "組時間": 300, "休息時間": "70 (參考ACSM)"},
-        {"器材": "復健助行車", "年齡": 80, "組數": 6, "次數": "不適用", "組時間": 300, "休息時間": "80 (參考ACSM)"},
-        {"器材": "復健助行車", "年齡": 90, "組數": 8, "次數": "不適用", "組時間": 300, "休息時間": "90 (參考ACSM)"},
+    # 器材三: 漫步機
+    {"器材": "漫步機", "年齡": 60, "組數": 2, "次數": "不適用", "組時間": "450 (AI推估)", "休息時間": "60 (參考ACSM)"},
+    {"器材": "漫步機", "年齡": 70, "組數": 2, "次數": "不適用", "組時間": "390 (AI推估)", "休息時間": "70 (參考ACSM)"},
+    {"器材": "漫步機", "年齡": 80, "組數": 2, "次數": "不適用", "組時間": "330 (AI推估)", "休息時間": "80 (參考ACSM)"},
+    {"器材": "漫步機", "年齡": 90, "組數": 2, "次數": "不適用", "組時間": "300 (AI推估)", "休息時間": "90 (參考ACSM)"},
+
+    # 器材四: 肩關節康復器
+    {"器材": "肩關節康復器", "年齡": 60, "組數": 5, "次數": 20, "組時間": "45 (AI推估)", "休息時間": "60 (參考ACSM)"},
+    {"器材": "肩關節康復器", "年齡": 70, "組數": 4, "次數": 16, "組時間": "38 (AI推估)", "休息時間": "70 (參考ACSM)"},
+    {"器材": "肩關節康復器", "年齡": 80, "組數": 3, "次數": 13, "組時間": "32 (AI推估)", "休息時間": "80 (參考ACSM)"},
+    {"器材": "肩關節康復器", "年齡": 90, "組數": 3, "次數": 10, "組時間": "28 (AI推估)", "休息時間": "90 (參考ACSM)"},
+
+    # 器材五: 復健助行車
+    {"器材": "復健助行車", "年齡": 60, "組數": 2, "次數": "不適用", "組時間": "300 (AI推估)", "休息時間": "60 (參考ACSM)"},
+    {"器材": "復健助行車", "年齡": 70, "組數": 4, "次數": "不適用", "組時間": "300 (AI推估)", "休息時間": "70 (參考ACSM)"},
+    {"器材": "復健助行車", "年齡": 80, "組數": 6, "次數": "不適用", "組時間": "300 (AI推估)", "休息時間": "80 (參考ACSM)"},
+    {"器材": "復健助行車", "年齡": 90, "組數": 8, "次數": "不適用", "組時間": "300 (AI推估)", "休息時間": "90 (參考ACSM)"},
 ]
 
 lookup_table = {}
@@ -74,8 +74,9 @@ prescription_details = {}
 
 for item in raw_data:
     sets = int(item["組數"])
-    set_time = int(item["組時間"])
-    rest_time = int(item["休息時間"])
+    # 從帶有文字的字串中擷取純數字供後端計算使用
+    set_time = int(str(item["組時間"]).split()[0])
+    rest_time = int(str(item["休息時間"]).split()[0])
     
     total_seconds = (set_time * sets) + (rest_time * (sets - 1)) if sets > 1 else set_time * sets
     total_minutes = max(1, round(total_seconds / 60))
@@ -195,22 +196,22 @@ with st.sidebar:
         st.rerun()
 
 # ==========================================
-# 5.5 顯示原始復健運動處方大表 (編號改為 1-20)
+# 5.5 顯示原始復健運動處方大表 (編號 1-20，帶文字說明)
 # ==========================================
 with st.expander("📋 點此檢視：復健運動處方大表", expanded=False):
     df_raw = pd.DataFrame(raw_data)
-    # 將預設的 index (0-19) 改成從 1 開始計算的編號 (1-20)
     df_raw.index = range(1, len(df_raw) + 1)
     df_raw.index.name = "序號"
     
-    df_raw = df_raw.rename(columns={"器材名稱": "器材名稱", "年齡層": "年齡層", "組數": "組數", "次數": "次數", "組時間": "組時間", "休息時間": "休息時間"})
+    df_raw = df_raw.rename(columns={"器材": "器材名稱", "年齡": "年齡層", "組數": "組數", "次數": "次數", "組時間": "組時間", "休息時間": "休息時間"})
     st.dataframe(df_raw, use_container_width=True)
 
 # ==========================================
 # 6. 主要看板內容區
 # ==========================================
 st.write("---")
-m1, m2, m3 = st.columns(3)
+# 恢復原有的兩欄指標（營運總時長、待辦處方數）
+m1, m2 = st.columns(2)
 
 current_total_seconds = int(time.time() - st.session_state.start_system_timestamp)
 system_time_text = f"{current_total_seconds // 3600} 時 {(current_total_seconds % 3600) // 60} 分 {current_total_seconds % 60} 秒"
@@ -220,25 +221,32 @@ m2.metric("待辦處方數", f"{len(st.session_state.waiting_queue)} 項")
 
 now_time = time.time()
 st.session_state.cooldown_patients = {k: v for k, v in st.session_state.cooldown_patients.items() if now_time < v}
-m3.metric("換場休息中", f"{len(st.session_state.cooldown_patients)} 人")
 
-# 健保卡號手動/條碼槍輸入區
+# 健保卡號手動/條碼槍輸入區（自動清空保護個資）
 with st.container():
     st.info("💡 **櫃台刷卡區**：請使用條碼槍或輸入健保卡號後按 Enter。")
-    card_input = st.text_input("健保卡號輸入框", placeholder="請刷入健保卡號...", key="card_scanner_input")
-    if card_input:
-        cleaned_card = card_input.strip().replace(" ", "").replace("-", "")
-        if cleaned_card in NORMALIZED_DB:
-            orig_key, p_info = NORMALIZED_DB[cleaned_card]
-            if orig_key not in st.session_state.scanned_cards:
-                add_patient_by_card(cleaned_card)
-                st.success(f"✅ 辨識成功！{p_info['last_name']}{p_info['title']} 已完成報到，共帶入 {len(p_info['equips'])} 項處方！")
-                time.sleep(0.5)
-                st.rerun()
+
+    def handle_card_input():
+        card_input = st.session_state.card_scanner_input
+        if card_input:
+            cleaned_card = card_input.strip().replace(" ", "").replace("-", "")
+            if cleaned_card in NORMALIZED_DB:
+                orig_key, p_info = NORMALIZED_DB[cleaned_card]
+                if orig_key not in st.session_state.scanned_cards:
+                    add_patient_by_card(cleaned_card)
+                    st.success(f"✅ 辨識成功！{p_info['last_name']}{p_info['title']} 已完成報到，共帶入 {len(p_info['equips'])} 項處方！")
+                else:
+                    st.warning(f"⚠️ {p_info['last_name']}{p_info['title']} 已經報到或正在進行中！")
             else:
-                st.warning(f"⚠️ {p_info['last_name']}{p_info['title']} 已經報到或正在進行中！")
-        else:
-            st.error(f"❌ 找不到對應的健保卡號，請確認是否正確。")
+                st.error(f"❌ 找不到對應的健保卡號，請確認是否正確。")
+        st.session_state.card_scanner_input = ""
+
+    st.text_input(
+        "健保卡號輸入框", 
+        placeholder="請刷入健保卡號...", 
+        key="card_scanner_input", 
+        on_change=handle_card_input
+    )
 
 # --- 核心調度邏輯 ---
 now = time.time()
@@ -408,7 +416,6 @@ with right_col:
                     set_time = pres["set_time"]
                     rest_time = pres["rest_time"]
                     
-                    # 狀態 A: 正在組間休息
                     if is_in_rest:
                         rest_elapsed = int(current_now - p["rest_start_time"])
                         rem_rest = max(0, rest_time - rest_elapsed)
@@ -428,7 +435,6 @@ with right_col:
                             p["prompted_set"] = p["current_set"] - 1
                             st.rerun()
 
-                    # 狀態 B: 達到設定時間，跳出彈窗
                     elif show_modal:
                         net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
                         st.markdown(f"""
@@ -460,7 +466,6 @@ with right_col:
                             p["prompted_set"] = p["current_set"]  
                             st.rerun()
 
-                    # 狀態 C: 正常訓練中
                     else:
                         if is_currently_paused:
                             remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
