@@ -166,9 +166,8 @@ with st.sidebar:
     st.write("點擊下方長輩按鈕模擬刷卡報到：")
     
     for c_id, info in PATIENT_DATABASE.items():
-        # 改回原本帶有卡號的按鈕顯示格式
+        # 僅顯示卡號、姓名與年齡，不附加已報到狀態
         btn_label = f"👤 [{c_id}] {info['last_name']}{info['title']} ({info['age']}歲)"
-        if info["id"] in st.session_state.active_patients or info["id"] in st.session_state.cooldown_patients:
             
         if st.button(btn_label, key=f"btn_{c_id}"):
             norm_id = c_id.replace(" ", "")
