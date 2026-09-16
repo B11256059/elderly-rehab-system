@@ -190,10 +190,14 @@ with st.sidebar:
         st.rerun()
 
 # ==========================================
-# 5.5 新增：顯示原始復健運動處方大表 (摺疊選單)
+# 5.5 顯示原始復健運動處方大表 (編號改為 1-20)
 # ==========================================
 with st.expander("📋 點此檢視：原始復健運動處方對照大表", expanded=False):
     df_raw = pd.DataFrame(raw_data)
+    # 將預設的 index (0-19) 改成從 1 開始計算的編號 (1-20)
+    df_raw.index = range(1, len(df_raw) + 1)
+    df_raw.index.name = "序號"
+    
     df_raw = df_raw.rename(columns={"器材": "復健器材", "年齡": "適用年齡層", "組數": "預定組數", "次數": "次數/頻率", "組時間": "單組秒數", "休息時間": "組間休息(秒)"})
     st.dataframe(df_raw, use_container_width=True)
 
