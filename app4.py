@@ -22,7 +22,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🏥 智慧復健動態排程管理系統（隨機多項處方版）")
+st.title("🏥 智慧復健動態排程管理系統（多項處方分流版）")
 
 # ==========================================
 # 2. 原始復健運動處方大表與動態隨機長輩資料庫
@@ -70,7 +70,7 @@ for item in raw_data:
         "sets": sets, "set_time": set_time, "rest_time": rest_time
     }
 
-# 初始化 10 位長輩隨機處方資料庫（確保分佈為：2人1項, 2人2項, 2人3項, 2人4項, 2人5項）
+# 初始化 10 位長輩隨機處方資料庫（2人1項, 2人2項, 2人3項, 2人4項, 2人5項）
 if "PATIENT_DATABASE" not in st.session_state:
     base_info = [
         {"id": 1, "last_name": "王", "title": "爺爺", "age": 80},
@@ -103,6 +103,7 @@ NORMALIZED_DB = {k.replace(" ", ""): (k, v) for k, v in PATIENT_DATABASE.items()
 # ==========================================
 # 3. 系統狀態初始化
 # ==========================================
+if "active_patients" not in st.session_state: st.session_state.active_patients = {}  # 記錄每位長輩目前正在進行或已完成的項目
 if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = []  
 if "equipment_status" not in st.session_state: 
     st.session_state.equipment_status = {
@@ -121,28 +122,32 @@ TRANSIT_COOLDOWN_SECONDS = 180
 MID_PAUSE_SECONDS = 60          
 
 # ==========================================
-# 4. 功能函數：加入排隊
+# 4. 功能函數：加入刷卡與多項處方初始化
 # ==========================================
 def add_patient_by_card(raw_card_key):
     orig_key, p_info = NORMALIZED_DB[raw_card_key]
     p_id = p_info["id"]
-    last_name = p_info["last_name"]
-    title = p_info["title"]
-    age = p_info["age"]
-    selected_equips = p_info["equips"]
     
-    for equip in selected_equips:
-        pres_info = prescription_details.get((equip, age), {"sets": 3, "set_time": 30, "rest_time": 60})
+    # 記錄這位長輩的所有處方與完成狀態
+    st.session_state.active_patients[p_id] = {
+        "info": p_info,
+        "completed_equips": set(),
+        "origin_key": orig_key
+    }
+    st.session_state.scanned_cards.add(orig_key)
+    
+    # 立即為其所有處方建立排隊任務
+    for equip in p_info["equips"]:
+        pres_info = prescription_details.get((equip, p_info["age"]), {"sets": 3, "set_time": 30, "rest_time": 60})
         st.session_state.waiting_queue.append({
-            "id": p_id, "name": f"{last_name}{title}", "age": age,
+            "id": p_id, "name": f"{p_info['last_name']}{p_info['title']}", "age": p_info['age'],
             "target_equip": equip, "arrival_time": time.time(),
-            "service_time": lookup_table.get((equip, age), 5),
+            "service_time": lookup_table.get((equip, p_info["age"]), 5),
             "prescription_detail": pres_info,
             "is_paused": False,      
             "pause_start_time": 0,      
             "total_paused_duration": 0  
         })
-    st.session_state.scanned_cards.add(orig_key)
 
 # ==========================================
 # 5. 側邊欄：刷卡模擬與長輩名單
@@ -152,8 +157,8 @@ with st.sidebar:
     st.write("點擊下方按鈕模擬刷入 12 位數健保卡：")
     
     for c_id, info in PATIENT_DATABASE.items():
-        btn_label = f"💳 {c_id}\n({info['last_name']}{info['title']}, {info['age']}歲, {len(info['equips'])}項)"
-        if info["id"] in [p["id"] for p in st.session_state.waiting_queue] or info["id"] in st.session_state.cooldown_patients:
+        btn_label = f"💳 {c_id}\n({info['last_name']}{info['title']}, {info['age']}歲, {len(info['equips']}項)"
+        if info["id"] in st.session_state.active_patients or info["id"] in st.session_state.cooldown_patients:
             btn_label += " [已報到]"
             
         if st.button(btn_label, key=f"btn_{c_id}"):
@@ -163,18 +168,18 @@ with st.sidebar:
                 st.success(f"識別成功：{info['last_name']}{info['title']} (#{info['id']:03d})，帶入 {len(info['equips'])} 項處方！")
                 st.rerun()
             else:
-                st.warning("此長輩已經報到或正在排隊中！")
+                st.warning("此長輩已經報到或正在進行中！")
                 
     st.write("---")
     if st.button("🧹 清空所有數據並重新洗牌"):
         st.session_state.waiting_queue = []
+        st.session_state.active_patients = {}
         st.session_state.equipment_status = {eq: None for eq in st.session_state.equipment_status.keys()}
         st.session_state.cooldown_patients = {}
         st.session_state.patient_history = {}
         st.session_state.scanned_cards = set()
         st.session_state.start_system_timestamp = time.time()
         
-        # 重新隨機洗牌處方數量分佈
         base_info = [
             {"id": 1, "last_name": "王", "title": "爺爺", "age": 80},
             {"id": 2, "last_name": "陳", "title": "奶奶", "age": 70},
@@ -229,7 +234,7 @@ with st.container():
                 time.sleep(0.5)
                 st.rerun()
             else:
-                st.warning(f"⚠️ 健保卡號 {orig_key} 已經報到或正在排隊中！")
+                st.warning(f"⚠️ 健保卡號 {orig_key} 已經報到或正在進行中！")
         else:
             st.error(f"❌ 找不到對應的健保卡號，請確認是否正確。")
 
@@ -280,6 +285,7 @@ for eq, p in list(st.session_state.equipment_status.items()):
             need_trigger_rerun = True
 
 if st.session_state.waiting_queue:
+    # 收集目前正在器材區運作或等待開始的人員 ID
     busy_ids = {p["id"] for p in st.session_state.equipment_status.values() if p}
     now = time.time()
     
@@ -302,6 +308,8 @@ if st.session_state.waiting_queue:
         is_cd = p["id"] in st.session_state.cooldown_patients
         available_eqs = [eq for eq, status in st.session_state.equipment_status.items() if status is None and eq.startswith(target_base)]
         
+        # 關鍵點：只有當該長輩「不在忙碌中（busy_ids）」、「不在換場冷卻中」、且「該器材有空位」時，才會被派去器材區！
+        # 否則，他會繼續留在 rem_waiting 裡面，顯示在現場排隊等待區！
         if available_eqs and p["id"] not in busy_ids and not is_cd:
             eq = available_eqs[0]
             p["start_time"] = now
@@ -315,7 +323,7 @@ if st.session_state.waiting_queue:
         else:
             rem_waiting.append(p)
             
-    st.session_state.waiting_queue = [p for p in rem_waiting if p["id"] not in busy_ids]
+    st.session_state.waiting_queue = rem_waiting
     need_trigger_rerun = True
 
 # ==========================================
