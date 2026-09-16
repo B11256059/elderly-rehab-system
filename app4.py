@@ -148,14 +148,15 @@ def add_patient_by_card(raw_card_key):
         })
 
 # ==========================================
-# 5. 側邊欄：刷卡模擬與長輩名單
+# 5. 側邊欄：刷卡模擬與長輩名單（改回顯示卡號）
 # ==========================================
 with st.sidebar:
     st.header("📇 模擬刷健保卡區")
     st.write("點擊下方長輩按鈕模擬刷卡報到：")
     
     for c_id, info in PATIENT_DATABASE.items():
-        btn_label = f"👤 {info['last_name']}{info['title']} ({info['age']}歲, {len(info['equips'])}項處方)"
+        # 改回原本帶有卡號的按鈕顯示格式
+        btn_label = f"👤 [{c_id}] {info['last_name']}{info['title']} ({info['age']}歲, {len(info['equips'])}項處方)"
         if info["id"] in st.session_state.active_patients or info["id"] in st.session_state.cooldown_patients:
             btn_label += " [已報到]"
             
@@ -228,7 +229,6 @@ with st.container():
             orig_key, p_info = NORMALIZED_DB[cleaned_card]
             if orig_key not in st.session_state.scanned_cards:
                 add_patient_by_card(cleaned_card)
-                # 這裡改為乾淨、有人情味的提示文字，不顯示卡號
                 st.success(f"✅ 辨識成功！{p_info['last_name']}{p_info['title']} 已完成報到，共帶入 {len(p_info['equips'])} 項處方！")
                 time.sleep(0.5)
                 st.rerun()
@@ -335,7 +335,6 @@ with left_col:
         display_data = []
         for p in st.session_state.waiting_queue:
             wait_seconds = int(now - p["arrival_time"])
-            # 表格內的長輩名稱也不帶編號
             id_str = f"{p['name']}"
             
             display_data.append({
