@@ -157,7 +157,7 @@ with st.sidebar:
     st.write("點擊下方按鈕模擬刷入 12 位數健保卡：")
     
     for c_id, info in PATIENT_DATABASE.items():
-        btn_label = f"💳 {c_id}\n({info['last_name']}{info['title']}, {info['age']}歲, {len(info['equips']}項)"
+        btn_label = f"💳 {c_id}\n({info['last_name']}{info['title']}, {info['age']}歲, {len(info['equips'])}項)"
         if info["id"] in st.session_state.active_patients or info["id"] in st.session_state.cooldown_patients:
             btn_label += " [已報到]"
             
