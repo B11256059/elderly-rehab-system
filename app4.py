@@ -154,7 +154,6 @@ with st.sidebar:
     st.write("點擊下方長輩按鈕模擬刷卡報到：")
     
     for c_id, info in PATIENT_DATABASE.items():
-        # 僅顯示卡號、姓名與年齡，乾淨俐落
         btn_label = f"👤 [{c_id}] {info['last_name']}{info['title']} ({info['age']}歲)"
             
         if st.button(btn_label, key=f"btn_{c_id}"):
@@ -176,7 +175,6 @@ with st.sidebar:
         st.session_state.scanned_cards = set()
         st.session_state.start_system_timestamp = time.time()
         
-        # 重設回固定的 10 位長輩資料庫
         st.session_state.PATIENT_DATABASE = {
             "1101 2203 4401": {"id": 1, "last_name": "王", "title": "爺爺", "age": 80, "equips": ["大轉輪", "坐推"]},
             "1101 2203 4402": {"id": 2, "last_name": "陳", "title": "奶奶", "age": 70, "equips": ["漫步機"]},
@@ -190,6 +188,14 @@ with st.sidebar:
             "1101 2203 4410": {"id": 10, "last_name": "黃", "title": "奶奶", "age": 90, "equips": ["大轉輪", "坐推", "漫步機"]}
         }
         st.rerun()
+
+# ==========================================
+# 5.5 新增：顯示原始復健運動處方大表 (摺疊選單)
+# ==========================================
+with st.expander("📋 點此檢視：原始復健運動處方對照大表", expanded=False):
+    df_raw = pd.DataFrame(raw_data)
+    df_raw = df_raw.rename(columns={"器材": "復健器材", "年齡": "適用年齡層", "組數": "預定組數", "次數": "次數/頻率", "組時間": "單組秒數", "休息時間": "組間休息(秒)"})
+    st.dataframe(df_raw, use_container_width=True)
 
 # ==========================================
 # 6. 主要看板內容區
