@@ -167,7 +167,7 @@ with st.sidebar:
     
     for c_id, info in PATIENT_DATABASE.items():
         # 改回原本帶有卡號的按鈕顯示格式
-        btn_label = f"👤 [{c_id}] {info['last_name']}{info['title']} ({info['age']}歲, {len(info['equips'])}項處方)"
+        btn_label = f"👤 [{c_id}] {info['last_name']}{info['title']} ({info['age']}歲)"
         if info["id"] in st.session_state.active_patients or info["id"] in st.session_state.cooldown_patients:
             btn_label += " [已報到]"
             
