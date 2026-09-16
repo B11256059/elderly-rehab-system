@@ -194,6 +194,7 @@ with st.sidebar:
 # ==========================================
 with st.expander("📋 點此檢視：原始復健運動處方對照大表", expanded=False):
     df_raw = pd.DataFrame(raw_data)
+    # 將預設的 index (0-19) 改成從 1 開始計算的編號 (1-20)
     df_raw.index = range(1, len(df_raw) + 1)
     df_raw.index.name = "序號"
     
@@ -216,31 +217,23 @@ now_time = time.time()
 st.session_state.cooldown_patients = {k: v for k, v in st.session_state.cooldown_patients.items() if now_time < v}
 m3.metric("換場休息中", f"{len(st.session_state.cooldown_patients)} 人")
 
-# 健保卡號手動/條碼槍輸入區（加入 Callback 自動清空輸入框，保護個資）
+# 健保卡號手動/條碼槍輸入區
 with st.container():
     st.info("💡 **櫃台刷卡區**：請使用條碼槍或輸入健保卡號後按 Enter。")
-
-    def handle_card_input():
-        card_input = st.session_state.card_scanner_input
-        if card_input:
-            cleaned_card = card_input.strip().replace(" ", "").replace("-", "")
-            if cleaned_card in NORMALIZED_DB:
-                orig_key, p_info = NORMALIZED_DB[cleaned_card]
-                if orig_key not in st.session_state.scanned_cards:
-                    add_patient_by_card(cleaned_card)
-                    st.success(f"✅ 辨識成功！{p_info['last_name']}{p_info['title']} 已完成報到，共帶入 {len(p_info['equips'])} 項處方！")
-                else:
-                    st.warning(f"⚠️ {p_info['last_name']}{p_info['title']} 已經報到或正在進行中！")
+    card_input = st.text_input("健保卡號輸入框", placeholder="請刷入健保卡...", key="card_scanner_input")
+    if card_input:
+        cleaned_card = card_input.strip().replace(" ", "").replace("-", "")
+        if cleaned_card in NORMALIZED_DB:
+            orig_key, p_info = NORMALIZED_DB[cleaned_card]
+            if orig_key not in st.session_state.scanned_cards:
+                add_patient_by_card(cleaned_card)
+                st.success(f"✅ 辨識成功！{p_info['last_name']}{p_info['title']} 已完成報到，共帶入 {len(p_info['equips'])} 項處方！")
+                time.sleep(0.5)
+                st.rerun()
             else:
-                st.error(f"❌ 找不到對應的健保卡號，請確認是否正確。")
-        st.session_state.card_scanner_input = ""
-
-    st.text_input(
-        "健保卡號輸入框", 
-        placeholder="請刷入健保卡...", 
-        key="card_scanner_input", 
-        on_change=handle_card_input
-    )
+                st.warning(f"⚠️ {p_info['last_name']}{p_info['title']} 已經報到或正在進行中！")
+        else:
+            st.error(f"❌ 找不到對應的健保卡號，請確認是否正確。")
 
 # --- 核心調度邏輯 ---
 now = time.time()
@@ -410,6 +403,7 @@ with right_col:
                     set_time = pres["set_time"]
                     rest_time = pres["rest_time"]
                     
+                    # 狀態 A: 正在組間休息
                     if is_in_rest:
                         rest_elapsed = int(current_now - p["rest_start_time"])
                         rem_rest = max(0, rest_time - rest_elapsed)
@@ -429,6 +423,7 @@ with right_col:
                             p["prompted_set"] = p["current_set"] - 1
                             st.rerun()
 
+                    # 狀態 B: 達到設定時間，跳出彈窗
                     elif show_modal:
                         net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
                         st.markdown(f"""
@@ -460,6 +455,7 @@ with right_col:
                             p["prompted_set"] = p["current_set"]  
                             st.rerun()
 
+                    # 狀態 C: 正常訓練中
                     else:
                         if is_currently_paused:
                             remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
