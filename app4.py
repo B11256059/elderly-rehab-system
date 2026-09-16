@@ -233,7 +233,6 @@ with st.container():
                     st.warning(f"⚠️ {p_info['last_name']}{p_info['title']} 已經報到或正在進行中！")
             else:
                 st.error(f"❌ 找不到對應的健保卡號，請確認是否正確。")
-        # 處理完畢後立即清空輸入框內容，避免卡號殘留在畫面上
         st.session_state.card_scanner_input = ""
 
     st.text_input(
@@ -411,7 +410,6 @@ with right_col:
                     set_time = pres["set_time"]
                     rest_time = pres["rest_time"]
                     
-                    # 狀態 A: 正在組間休息
                     if is_in_rest:
                         rest_elapsed = int(current_now - p["rest_start_time"])
                         rem_rest = max(0, rest_time - rest_elapsed)
@@ -431,7 +429,6 @@ with right_col:
                             p["prompted_set"] = p["current_set"] - 1
                             st.rerun()
 
-                    # 狀態 B: 達到設定時間，跳出彈窗
                     elif show_modal:
                         net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
                         st.markdown(f"""
@@ -463,7 +460,6 @@ with right_col:
                             p["prompted_set"] = p["current_set"]  
                             st.rerun()
 
-                    # 狀態 C: 正常訓練中
                     else:
                         if is_currently_paused:
                             remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
