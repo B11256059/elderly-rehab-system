@@ -17,24 +17,14 @@ st.markdown("""
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-left: 5px solid #10b981;
         margin-bottom: 20px;
     }
-    .status-card.paused {
-        border-left: 5px solid #eab308; 
-        background-color: #fefce8;
-    }
-    .status-card.auto-resting {
-        border-left: 5px solid #10b981; 
-        background-color: #f0fdf4;
-    }
-    .waiting-row { font-size: 0.9em; padding: 10px; border-bottom: 1px solid #e2e8f0; }
     .highlight-text { color: #0e7490; font-weight: bold; }
-    .warning-text { color: #b45309; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🏥 智慧復健動態排程管理系統（健保卡快速刷入版）")
+st.title("🏥 智慧復健動態排程管理系統（擬真健保卡刷卡版）")
 
 # ==========================================
-# 2. 原始復健運動處方大表與 10 位固定長輩資料庫
+# 2. 原始復健運動處方大表與 10 位長輩資料庫
 # ==========================================
 raw_data = [
     {"器材": "大轉輪", "年齡": 60, "組數": 5, "次數": 20, "組時間": 50, "休息時間": 60},
@@ -69,7 +59,6 @@ def format_unit(value, unit):
     if unit in val_str or "不適用" in val_str: return val_str
     return f"{val_str} {unit}"
 
-matrix_rows = []
 lookup_table = {}
 prescription_details = {}
 
@@ -78,43 +67,30 @@ for item in raw_data:
     set_time = int(item["組時間"])
     rest_time = int(item["休息時間"])
     
-    if sets > 1:
-        total_seconds = (set_time * sets) + (rest_time * (sets - 1))
-    else:
-        total_seconds = set_time * sets
-        
+    total_seconds = (set_time * sets) + (rest_time * (sets - 1)) if sets > 1 else set_time * sets
     total_minutes = max(1, round(total_seconds / 60))
     
     lookup_table[(item["器材"], item["年齡"])] = total_minutes
     prescription_details[(item["器材"], item["年齡"])] = {
-        "sets": sets,
-        "set_time": set_time,
-        "rest_time": rest_time
+        "sets": sets, "set_time": set_time, "rest_time": rest_time
     }
 
-    matrix_rows.append({
-        "器材名稱": item["器材"],
-        "年齡層": f"{item['年齡']} 歲",
-        "次數": format_unit(item["次數"], "次"),
-        "組數": format_unit(item["組數"], "組"),
-        "組時間": format_unit(item["組時間"], "秒"),
-        "休息時間": format_unit(item["休息時間"], "秒"),
-        "總時間": f"{total_minutes} 分"
-    })
-
-# 內建 10 位長輩資料庫（對應卡號、姓名、稱謂、年齡、以及不同數量的固定處方器材）
+# 內建 10 位長輩資料庫（12位數模擬健保卡號，每人分配 3~5 項豐富復健器材處方）
 PATIENT_DATABASE = {
-    "A1001": {"id": 1, "last_name": "王", "title": "爺爺", "age": 80, "equips": ["大轉輪"]}, # 1項
-    "A1002": {"id": 2, "last_name": "陳", "title": "奶奶", "age": 70, "equips": ["坐推", "漫步機"]}, # 2項
-    "A1003": {"id": 3, "last_name": "林", "title": "爺爺", "age": 90, "equips": ["大轉輪", "肩關節康復器", "復健助行車"]}, # 3項
-    "A1004": {"id": 4, "last_name": "張", "title": "奶奶", "age": 60, "equips": ["大轉輪", "坐推", "漫步機", "肩關節康復器"]}, # 4項
-    "A1005": {"id": 5, "last_name": "李", "title": "爺爺", "age": 80, "equips": ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]}, # 5項
-    "A1006": {"id": 6, "last_name": "吳", "title": "奶奶", "age": 70, "equips": ["漫步機"]}, # 1項
-    "A1007": {"id": 7, "last_name": "劉", "title": "爺爺", "age": 90, "equips": ["坐推", "復健助行車"]}, # 2項
-    "A1008": {"id": 8, "last_name": "蔡", "title": "奶奶", "age": 60, "equips": ["大轉輪", "肩關節康復器", "復健助行車"]}, # 3項
-    "A1009": {"id": 9, "last_name": "楊", "title": "爺爺", "age": 80, "equips": ["坐推", "漫步機", "肩關節康復器", "復健助行車"]}, # 4項
-    "A1010": {"id": 10, "last_name": "黃", "title": "奶奶", "age": 90, "equips": ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]} # 5項
+    "1101 2203 4401": {"id": 1, "last_name": "王", "title": "爺爺", "age": 80, "equips": ["大轉輪", "坐推", "漫步機"]},
+    "1101 2203 4402": {"id": 2, "last_name": "陳", "title": "奶奶", "age": 70, "equips": ["坐推", "肩關節康復器", "復健助行車", "漫步機"]},
+    "1101 2203 4403": {"id": 3, "last_name": "林", "title": "爺爺", "age": 90, "equips": ["大轉輪", "肩關節康復器", "復健助行車", "坐推", "漫步機"]},
+    "1101 2203 4404": {"id": 4, "last_name": "張", "title": "奶奶", "age": 60, "equips": ["大轉輪", "坐推", "漫步機", "肩關節康復器"]},
+    "1101 2203 4405": {"id": 5, "last_name": "李", "title": "爺爺", "age": 80, "equips": ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]},
+    "1101 2203 4406": {"id": 6, "last_name": "吳", "title": "奶奶", "age": 70, "equips": ["漫步機", "肩關節康復器", "復健助行車", "大轉輪"]},
+    "1101 2203 4407": {"id": 7, "last_name": "劉", "title": "爺爺", "age": 90, "equips": ["坐推", "復健助行車", "大轉輪", "漫步機"]},
+    "1101 2203 4408": {"id": 8, "last_name": "蔡", "title": "奶奶", "age": 60, "equips": ["大轉輪", "肩關節康復器", "復健助行車", "坐推"]},
+    "1101 2203 4409": {"id": 9, "last_name": "楊", "title": "爺爺", "age": 80, "equips": ["坐推", "漫步機", "肩關節康復器", "復健助行車", "大轉輪"]},
+    "1101 2203 4410": {"id": 10, "last_name": "黃", "title": "奶奶", "age": 90, "equips": ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]}
 }
+
+# 建立純數字對照，方便比對
+NORMALIZED_DB = {k.replace(" ", ""): (k, v) for k, v in PATIENT_DATABASE.items()}
 
 # ==========================================
 # 3. 系統狀態初始化
@@ -139,15 +115,14 @@ MID_PAUSE_SECONDS = 60
 # ==========================================
 # 4. 功能函數：加入排隊
 # ==========================================
-def add_patient_by_card(card_id):
-    p_info = PATIENT_DATABASE[card_id]
+def add_patient_by_card(raw_card_key):
+    orig_key, p_info = NORMALIZED_DB[raw_card_key]
     p_id = p_info["id"]
     last_name = p_info["last_name"]
     title = p_info["title"]
     age = p_info["age"]
     selected_equips = p_info["equips"]
     
-    # 將該長輩處方中的所有器材依序加入等待佇列
     for equip in selected_equips:
         pres_info = prescription_details.get((equip, age), {"sets": 3, "set_time": 30, "rest_time": 60})
         st.session_state.waiting_queue.append({
@@ -159,24 +134,25 @@ def add_patient_by_card(card_id):
             "pause_start_time": 0,      
             "total_paused_duration": 0  
         })
-    st.session_state.scanned_cards.add(card_id)
+    st.session_state.scanned_cards.add(orig_key)
 
 # ==========================================
-# 5. 側邊欄：刷卡模擬與 10 位長輩對照表
+# 5. 側邊欄：刷卡模擬與長輩名單
 # ==========================================
 with st.sidebar:
-    st.header("📇 健保卡刷卡模擬區")
-    st.write("點擊下方按鈕模擬「刷入」不同長輩的健保卡：")
+    st.header("📇 模擬刷健保卡區")
+    st.write("點擊下方按鈕模擬刷入 12 位數健保卡：")
     
     for c_id, info in PATIENT_DATABASE.items():
-        btn_label = f"💳 刷卡: {c_id} ({info['last_name']}{info['title']}, {info['age']}歲)"
+        btn_label = f"💳 {c_id}\n({info['last_name']}{info['title']}, {info['age']}歲)"
         if info["id"] in [p["id"] for p in st.session_state.waiting_queue] or info["id"] in st.session_state.cooldown_patients:
             btn_label += " [已報到]"
             
         if st.button(btn_label, key=f"btn_{c_id}"):
+            norm_id = c_id.replace(" ", "")
             if c_id not in st.session_state.scanned_cards:
-                add_patient_by_card(c_id)
-                st.success(f"成功識別：{info['last_name']}{info['title']}，已自動帶入 {len(info['equips'])} 項復健處方！")
+                add_patient_by_card(norm_id)
+                st.success(f"識別成功：{info['last_name']}{info['title']} (#{info['id']:03d})，帶入 {len(info['equips'])} 項處方！")
                 st.rerun()
             else:
                 st.warning("此長輩已經報到或正在排隊中！")
@@ -205,26 +181,27 @@ m2.metric("待辦處方數", f"{len(st.session_state.waiting_queue)} 項")
 
 now_time = time.time()
 st.session_state.cooldown_patients = {k: v for k, v in st.session_state.cooldown_patients.items() if now_time < v}
-m3.metric("換場休息中(3分/人)", f"{len(st.session_state.cooldown_patients)} 人")
+m3.metric("換場休息中", f"{len(st.session_state.cooldown_patients)} 人")
 
 # 健保卡號手動/條碼槍輸入區
 with st.container():
-    st.info("💡 **康復中心櫃台刷卡區**：請使用條碼槍刷入健保卡，或直接在下方輸入卡號（例如：A1001 ~ A1010）後按下 Enter。")
-    card_input = st.text_input("健保卡號輸入框", placeholder="請刷入卡號，例如 A1001", key="card_scanner_input")
+    st.info("💡 **櫃台刷卡區**：請使用條碼槍或手動輸入 12 位數健保卡號（例如：`1101 2203 4401` 或連續數字 `110122034401`）後按 Enter。")
+    card_input = st.text_input("健保卡號輸入框", placeholder="請輸入 12 位數健保卡號...", key="card_scanner_input")
     if card_input:
-        cleaned_card = card_input.strip().upper()
-        if cleaned_card in PATIENT_DATABASE:
-            if cleaned_card not in st.session_state.scanned_cards:
+        cleaned_card = card_input.strip().replace(" ", "").replace("-", "")
+        if cleaned_card in NORMALIZED_DB:
+            orig_key, p_info = NORMALIZED_DB[cleaned_card]
+            if orig_key not in st.session_state.scanned_cards:
                 add_patient_by_card(cleaned_card)
-                st.success(f"✅ 辨識成功！歡迎 {PATIENT_DATABASE[cleaned_card]['last_name']}{PATIENT_DATABASE[cleaned_card]['title']}，已自動帶入處方！")
+                st.success(f"✅ 辨識成功！歡迎 {p_info['last_name']}{p_info['title']} (#{p_info['id']:03d})，已自動帶入處方！")
                 time.sleep(0.5)
                 st.rerun()
             else:
-                st.warning(f"⚠️ 卡號 {cleaned_card} 已經完成報到或正在排隊中！")
+                st.warning(f"⚠️ 健保卡號 {orig_key} 已經報到或正在排隊中！")
         else:
-            st.error(f"❌ 找不到卡號「{cleaned_card}」，請確認是否為系統內建的 10 位長輩卡號。")
+            st.error(f"❌ 找不到對應的健保卡號，請確認是否正確。")
 
-# --- HRRN 核心調度與時間維護邏輯 ---
+# --- 核心調度邏輯 ---
 now = time.time()
 need_trigger_rerun = False 
 
@@ -322,11 +299,10 @@ with left_col:
         display_data = []
         for p in st.session_state.waiting_queue:
             wait_seconds = int(now - p["arrival_time"])
-            id_str = f"#{p['id']:03d}"
+            id_str = f"{p['name']} #{p['id']:03d}"
             
             display_data.append({
                 "長輩編號": id_str,
-                "姓名": p["name"],
                 "年齡": f"{p['age']}歲",
                 "目標器材": p["target_equip"],
                 "等待時間": f"{wait_seconds}秒",
@@ -365,7 +341,7 @@ with right_col:
                     st.markdown(f"""
                     <div class="status-card" style="background-color: {bg_color}; border-left: 5px solid {border_color};">
                         <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                        👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
+                        👤 使用者: <span class="highlight-text">{p['name']} (#{p['id']:03d}, {p['age']}歲)</span><br>
                         狀態: <span style="color:{'#b91c1c' if wait_time > 60 else '#1d4ed8'}; font-weight:bold;">{status_text}</span>
                     </div>
                     """, unsafe_allow_html=True)
@@ -389,7 +365,7 @@ with right_col:
                         st.markdown(f"""
                         <div class="status-card" style="background-color: #f0fdf4; border-left: 5px solid #22c55e;">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
+                            👤 使用者: <span class="highlight-text">{p['name']} (#{p['id']:03d}, {p['age']}歲)</span><br>
                             🔄 <span style="color:#15803d; font-weight:bold;">組間休息中</span> (剩餘: {rem_rest} 秒)
                         </div>
                         """, unsafe_allow_html=True)
@@ -406,9 +382,8 @@ with right_col:
                         st.markdown(f"""
                         <div class="status-card" style="background-color: #fef3c7; border-left: 5px solid #d97706;">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
-                            ⚠️ <span style="color:#b45309; font-weight:bold;">第 {p['current_set']} 組已達預定時間！</span><br>
-                            請問本組是否已完成？
+                            👤 使用者: <span class="highlight-text">{p['name']} (#{p['id']:03d}, {p['age']}歲)</span><br>
+                            ⚠️ <span style="color:#b45309; font-weight:bold;">第 {p['current_set']} 組已達預定時間！</span>
                         </div>
                         """, unsafe_allow_html=True)
                         
@@ -427,7 +402,7 @@ with right_col:
                                 p["rest_start_time"] = time.time()
                             st.rerun()
                             
-                        if c2.button(f"❌ 尚未完成 (繼續訓練)", key=f"conf_not_yet_{eq}2"):
+                        if c2.button(f"❌ 繼續訓練", key=f"conf_not_yet_{eq}2"):
                             p["show_target_reached_modal"] = False
                             p["prompted_set"] = p["current_set"] 
                             st.rerun()
@@ -437,7 +412,7 @@ with right_col:
                         st.markdown(f"""
                         <div class="status-card">
                             <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
-                            👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
+                            👤 使用者: <span class="highlight-text">{p['name']} (#{p['id']:03d}, {p['age']}歲)</span><br>
                             🏋️ 正在執行: 第 {p['current_set']}/{sets} 組訓練<br>
                             ⏱️ 淨執行時間: {net_active_sec}秒 / 單組預定: {set_time}秒
                         </div>
