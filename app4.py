@@ -35,7 +35,7 @@ st.markdown("""
 st.title("🏥 智慧復健動態排程管理系統（多項處方分流版）")
 
 # ==========================================
-# 2. 原始復健運動處方大表與動態隨機長輩資料庫
+# 2. 原始復健運動處方大表與固定長輩資料庫
 # ==========================================
 raw_data = [
     {"器材": "大轉輪", "年齡": 60, "組數": 5, "次數": 20, "組時間": 50, "休息時間": 60},
@@ -80,32 +80,20 @@ for item in raw_data:
         "sets": sets, "set_time": set_time, "rest_time": rest_time
     }
 
-# 初始化 10 位長輩隨機處方資料庫
+# 初始化 10 位長輩固定處方資料庫
 if "PATIENT_DATABASE" not in st.session_state:
-    base_info = [
-        {"id": 1, "last_name": "王", "title": "爺爺", "age": 80},
-        {"id": 2, "last_name": "陳", "title": "奶奶", "age": 70},
-        {"id": 3, "last_name": "林", "title": "爺爺", "age": 90},
-        {"id": 4, "last_name": "張", "title": "奶奶", "age": 60},
-        {"id": 5, "last_name": "李", "title": "爺爺", "age": 80},
-        {"id": 6, "last_name": "吳", "title": "奶奶", "age": 70},
-        {"id": 7, "last_name": "劉", "title": "爺爺", "age": 90},
-        {"id": 8, "last_name": "蔡", "title": "奶奶", "age": 60},
-        {"id": 9, "last_name": "楊", "title": "爺爺", "age": 80},
-        {"id": 10, "last_name": "黃", "title": "奶奶", "age": 90}
-    ]
-    
-    item_counts = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
-    random.shuffle(item_counts)
-    all_equip_types = ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]
-    
-    db = {}
-    for i, info in enumerate(base_info):
-        card_key = f"1101 2203 44{i+1:02d}"
-        k = item_counts[i]
-        info["equips"] = random.sample(all_equip_types, k)
-        db[card_key] = info
-    st.session_state.PATIENT_DATABASE = db
+    st.session_state.PATIENT_DATABASE = {
+        "1101 2203 4401": {"id": 1, "last_name": "王", "title": "爺爺", "age": 80, "equips": ["大轉輪", "坐推"]},
+        "1101 2203 4402": {"id": 2, "last_name": "陳", "title": "奶奶", "age": 70, "equips": ["漫步機"]},
+        "1101 2203 4403": {"id": 3, "last_name": "林", "title": "爺爺", "age": 90, "equips": ["肩關節康復器", "復健助行車", "大轉輪"]},
+        "1101 2203 4404": {"id": 4, "last_name": "張", "title": "奶奶", "age": 60, "equips": ["坐推", "漫步機"]},
+        "1101 2203 4405": {"id": 5, "last_name": "李", "title": "爺爺", "age": 80, "equips": ["復健助行車"]},
+        "1101 2203 4406": {"id": 6, "last_name": "吳", "title": "奶奶", "age": 70, "equips": ["大轉輪", "肩關節康復器"]},
+        "1101 2203 4407": {"id": 7, "last_name": "劉", "title": "爺爺", "age": 90, "equips": ["坐推", "漫步機", "肩關節康復器"]},
+        "1101 2203 4408": {"id": 8, "last_name": "蔡", "title": "奶奶", "age": 60, "equips": ["大轉輪", "復健助行車", "漫步機", "坐推"]},
+        "1101 2203 4409": {"id": 9, "last_name": "楊", "title": "爺爺", "age": 80, "equips": ["肩關節康復器"]},
+        "1101 2203 4410": {"id": 10, "last_name": "黃", "title": "奶奶", "age": 90, "equips": ["大轉輪", "坐推", "漫步機"]}
+    }
 
 PATIENT_DATABASE = st.session_state.PATIENT_DATABASE
 NORMALIZED_DB = {k.replace(" ", ""): (k, v) for k, v in PATIENT_DATABASE.items()}
@@ -115,7 +103,7 @@ NORMALIZED_DB = {k.replace(" ", ""): (k, v) for k, v in PATIENT_DATABASE.items()
 # ==========================================
 if "active_patients" not in st.session_state: st.session_state.active_patients = {}
 if "waiting_queue" not in st.session_state: st.session_state.waiting_queue = []  
-if "patient_groups" not in st.session_state: st.session_state.patient_groups = {} # <--- 加上這行就能解決 KeyError！
+if "patient_groups" not in st.session_state: st.session_state.patient_groups = {} 
 if "equipment_status" not in st.session_state: 
     st.session_state.equipment_status = {
         "大轉輪_1": None, 
@@ -159,14 +147,14 @@ def add_patient_by_card(raw_card_key):
         })
 
 # ==========================================
-# 5. 側邊欄：刷卡模擬與長輩名單（改回顯示卡號）
+# 5. 側邊欄：刷卡模擬與長輩名單
 # ==========================================
 with st.sidebar:
     st.header("📇 模擬刷健保卡區")
     st.write("點擊下方長輩按鈕模擬刷卡報到：")
     
     for c_id, info in PATIENT_DATABASE.items():
-        # 僅顯示卡號、姓名與年齡，不附加已報到狀態
+        # 僅顯示卡號、姓名與年齡，乾淨俐落
         btn_label = f"👤 [{c_id}] {info['last_name']}{info['title']} ({info['age']}歲)"
             
         if st.button(btn_label, key=f"btn_{c_id}"):
@@ -179,7 +167,7 @@ with st.sidebar:
                 st.warning(f"⚠️ {info['last_name']}{info['title']} 已經報到或正在進行中！")
                 
     st.write("---")
-    if st.button("🧹 清空所有數據並重新洗牌"):
+    if st.button("🧹 清空所有數據並重置"):
         st.session_state.waiting_queue = []
         st.session_state.active_patients = {}
         st.session_state.equipment_status = {eq: None for eq in st.session_state.equipment_status.keys()}
@@ -188,28 +176,19 @@ with st.sidebar:
         st.session_state.scanned_cards = set()
         st.session_state.start_system_timestamp = time.time()
         
-        base_info = [
-            {"id": 1, "last_name": "王", "title": "爺爺", "age": 80},
-            {"id": 2, "last_name": "陳", "title": "奶奶", "age": 70},
-            {"id": 3, "last_name": "林", "title": "爺爺", "age": 90},
-            {"id": 4, "last_name": "張", "title": "奶奶", "age": 60},
-            {"id": 5, "last_name": "李", "title": "爺爺", "age": 80},
-            {"id": 6, "last_name": "吳", "title": "奶奶", "age": 70},
-            {"id": 7, "last_name": "劉", "title": "爺爺", "age": 90},
-            {"id": 8, "last_name": "蔡", "title": "奶奶", "age": 60},
-            {"id": 9, "last_name": "楊", "title": "爺爺", "age": 80},
-            {"id": 10, "last_name": "黃", "title": "奶奶", "age": 90}
-        ]
-        item_counts = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
-        random.shuffle(item_counts)
-        all_equip_types = ["大轉輪", "坐推", "漫步機", "肩關節康復器", "復健助行車"]
-        db = {}
-        for i, info in enumerate(base_info):
-            card_key = f"1101 2203 44{i+1:02d}"
-            k = item_counts[i]
-            info["equips"] = random.sample(all_equip_types, k)
-            db[card_key] = info
-        st.session_state.PATIENT_DATABASE = db
+        # 重設回固定的 10 位長輩資料庫
+        st.session_state.PATIENT_DATABASE = {
+            "1101 2203 4401": {"id": 1, "last_name": "王", "title": "爺爺", "age": 80, "equips": ["大轉輪", "坐推"]},
+            "1101 2203 4402": {"id": 2, "last_name": "陳", "title": "奶奶", "age": 70, "equips": ["漫步機"]},
+            "1101 2203 4403": {"id": 3, "last_name": "林", "title": "爺爺", "age": 90, "equips": ["肩關節康復器", "復健助行車", "大轉輪"]},
+            "1101 2203 4404": {"id": 4, "last_name": "張", "title": "奶奶", "age": 60, "equips": ["坐推", "漫步機"]},
+            "1101 2203 4405": {"id": 5, "last_name": "李", "title": "爺爺", "age": 80, "equips": ["復健助行車"]},
+            "1101 2203 4406": {"id": 6, "last_name": "吳", "title": "奶奶", "age": 70, "equips": ["大轉輪", "肩關節康復器"]},
+            "1101 2203 4407": {"id": 7, "last_name": "劉", "title": "爺爺", "age": 90, "equips": ["坐推", "漫步機", "肩關節康復器"]},
+            "1101 2203 4408": {"id": 8, "last_name": "蔡", "title": "奶奶", "age": 60, "equips": ["大轉輪", "復健助行車", "漫步機", "坐推"]},
+            "1101 2203 4409": {"id": 9, "last_name": "楊", "title": "爺爺", "age": 80, "equips": ["肩關節康復器"]},
+            "1101 2203 4410": {"id": 10, "last_name": "黃", "title": "奶奶", "age": 90, "equips": ["大轉輪", "坐推", "漫步機"]}
+        }
         st.rerun()
 
 # ==========================================
@@ -463,10 +442,10 @@ with right_col:
                             
                         if c2.button(f"❌ 尚未完成 (繼續訓練)", key=f"conf_not_yet_{eq}"):
                             p["show_target_reached_modal"] = False
-                            p["prompted_set"] = p["current_set"]  # 標記這組已經問過了，不會重複跳出
+                            p["prompted_set"] = p["current_set"]  
                             st.rerun()
 
-                    # 狀態 C: 正常訓練中（包含點擊「尚未完成」後，時間繼續往上增加）
+                    # 狀態 C: 正常訓練中
                     else:
                         if is_currently_paused:
                             remaining_pause = max(0, int(MID_PAUSE_SECONDS - (current_now - p["pause_start_time"])))
@@ -479,14 +458,13 @@ with right_col:
                             """, unsafe_allow_html=True)
                         else:
                             net_active_sec = int(current_now - p["start_time"] - p.get("total_paused_duration", 0))
-                            overtime_text = ""  # 已移除超時提示文字
                             
                             st.markdown(f"""
                             <div class="status-card">
                                 <b style='font-size:1.2em;'>⚙️ {eq}</b><br>
                                 👤 使用者: <span class="highlight-text">{p['name']} ({p['age']}歲) [#{p['id']:03d}]</span><br>
                                 🏋️ 正在執行: 第 {p['current_set']}/{sets} 組訓練<br>
-                                ⏱️ 淨執行時間: {net_active_sec}秒 / 單組預定: {set_time}秒{overtime_text}
+                                ⏱️ 淨執行時間: {net_active_sec}秒 / 單組預定: {set_time}秒
                             </div>
                             """, unsafe_allow_html=True)
                         
@@ -503,8 +481,7 @@ with right_col:
                                 p["is_paused"] = True
                                 p["pause_start_time"] = time.time()
                                 st.rerun()
-                            # 隨時可以按的「已完成此組」按鈕
-                            if c2.button(f"✅ 已完成此組", key=f"force_done_set_{eq}"):
+                            if c2.button(f"✅ 已完成此組", key=f"force_done_set_{eq}@@"):
                                 p["prompted_set"] = p["current_set"]
                                 p["show_target_reached_modal"] = False
                                 if p["current_set"] >= sets:
@@ -520,7 +497,7 @@ with right_col:
             else:
                 st.markdown(f"""<div class="status-card" style="border-left: 5px solid #cbd5e1; color: #94a3b8; padding: 25px;"><b>⚙️ {eq}</b><br>🟢 空閒中</div>""", unsafe_allow_html=True)
 
-# 安全控制的自動刷新（只有當畫面上有活動中的項目時才執行，避免死循環）
+# 安全控制的自動刷新
 has_active = len(st.session_state.waiting_queue) > 0 or any(p is not None for p in st.session_state.equipment_status.values()) or len(st.session_state.cooldown_patients) > 0
 
 if has_active:
